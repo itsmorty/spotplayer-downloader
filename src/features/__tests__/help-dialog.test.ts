@@ -49,6 +49,14 @@ describe('openHelpDialog', () => {
     for (const step of fa.help.steps) expect(box.textContent).toContain(step)
     expect(box.querySelector('[data-testid="bookmarklet"]')).not.toBeNull()
     expect(box.textContent).toContain(fa.help.privacy)
+
+    const privacy = box.querySelector('[role="note"]')
+    if (!privacy) throw new Error('missing privacy note')
+    expect(privacy.className).toContain('bg-info/10')
+    expect(privacy.className).toContain('border-info/30')
+    expect(privacy.className).not.toContain('alert-info')
+    expect(privacy.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
+
     expect(box.textContent).toContain(fa.common.close)
 
     const closeForm = box.querySelector('form[method="dialog"]')

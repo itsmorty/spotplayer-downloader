@@ -130,7 +130,10 @@ export function createVideoList(opts: VideoListOptions = {}): VideoListHandle {
 
   const table = el(
     'table',
-    { class: 'table table-zebra table-sm md:table-md w-full', 'aria-label': fa.videos.tableAria },
+    {
+      class: 'table table-zebra table-sm md:table-md w-full min-w-[42rem]',
+      'aria-label': fa.videos.tableAria,
+    },
     el(
       'thead',
       {},

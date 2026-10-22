@@ -22,6 +22,8 @@ export function formatNumber(value: number): string {
 /** Encrypted byte count → «832.4 مگابایت» (one decimal, Latin digits). */
 export function formatBytes(bytes: number): string {
   const mb = Math.max(0, finiteOrZero(bytes)) / BYTES_PER_MB
+  if (mb === 0) return `0 ${fa.units.megabyte}`
+  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} ${fa.units.gigabyte}`
   return `${mb.toFixed(1)} ${fa.units.megabyte}`
 }
 

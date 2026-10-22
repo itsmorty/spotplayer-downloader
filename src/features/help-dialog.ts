@@ -7,6 +7,7 @@
 import { fa } from '../i18n/fa'
 import { openDialog } from '../ui/dialog'
 import { el } from '../ui/el'
+import { createIcon } from '../ui/icons'
 import { createBookmarkletSection } from './bookmarklet'
 
 function createSteps(): HTMLOListElement {
@@ -34,7 +35,16 @@ function createSteps(): HTMLOListElement {
 function createPrivacyNote(): HTMLElement {
   return el(
     'div',
-    { class: 'alert alert-info items-start text-sm leading-6', role: 'note' },
+    {
+      class:
+        'alert items-start border border-info/30 bg-info/10 text-sm leading-6 text-base-content shadow-none',
+      role: 'note',
+    },
+    el(
+      'span',
+      { class: 'mt-0.5 shrink-0 text-info', 'aria-hidden': 'true' },
+      createIcon('shield'),
+    ),
     el(
       'div',
       { class: 'flex flex-col gap-1' },

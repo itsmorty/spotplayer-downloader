@@ -8,6 +8,7 @@
 
 import { fa } from '../i18n/fa'
 import { el } from '../ui/el'
+import { createIcon } from '../ui/icons'
 
 export const DISCLAIMER_KEY = 'sp-disclaimer-ack'
 
@@ -56,10 +57,15 @@ export function createDisclaimer(opts: DisclaimerOptions = {}): HTMLElement | nu
   const banner = el(
     'section',
     {
-      class: 'alert alert-info items-start text-sm leading-6',
+      class: 'alert items-start border border-info/30 bg-info/10 text-sm leading-6 text-base-content shadow-none',
       role: 'note',
       'aria-labelledby': titleId,
     },
+    el(
+      'span',
+      { class: 'mt-0.5 shrink-0 text-info', 'aria-hidden': 'true' },
+      createIcon('info'),
+    ),
     el(
       'div',
       { class: 'flex flex-col gap-2' },

@@ -21,7 +21,12 @@ describe('createDisclaimer', () => {
     expect(banner.textContent).toContain(fa.disclaimer.title)
     expect(banner.textContent).toContain(fa.disclaimer.body)
     expect(banner.textContent).toContain(fa.disclaimer.accept)
-    expect(banner.className).toContain('alert-info')
+    // Soft tinted panel, not a solid neon `alert-info` block.
+    expect(banner.className).toContain('alert')
+    expect(banner.className).toContain('bg-info/10')
+    expect(banner.className).toContain('border-info/30')
+    expect(banner.className).not.toContain('alert-info')
+    expect(banner.querySelector('svg[aria-hidden="true"]')).not.toBeNull()
   })
 
   it('hides immediately and persists acceptance under a stable key', () => {
