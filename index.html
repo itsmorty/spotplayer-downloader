@@ -2,13 +2,32 @@
 <html lang="fa" dir="rtl" data-theme="light">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta
       name="description"
       content="استخراج‌کنندهٔ ویدیوهای دورهٔ اسپات‌پلیر — کاملاً در مرورگر، بدون ارسال اطلاعات به سرور."
     />
     <title>استخراج‌کنندهٔ دورهٔ اسپات‌پلیر</title>
+    <script>
+      // Apply the saved theme (or the OS preference) before the first paint.
+      // Keep the key and fallback in sync with src/ui/theme.ts.
+      ;(() => {
+        try {
+          const saved = localStorage.getItem('sp-theme')
+          const theme =
+            saved === 'light' || saved === 'dark'
+              ? saved
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light'
+          document.documentElement.dataset.theme = theme
+        } catch {
+          // Storage/matchMedia can be unavailable; the light default stands.
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

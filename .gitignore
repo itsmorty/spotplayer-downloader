@@ -5,3 +5,5 @@ dist/
 *.mp4
 *.mp4s
 creds*.json
+
+.playwright-mcp/

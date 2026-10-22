@@ -8,6 +8,31 @@
 
 @layer base {
   body {
-    @apply bg-base-100 font-sans text-base-content antialiased;
+    @apply min-h-dvh bg-base-100 font-sans text-base-content antialiased;
   }
+
+  html {
+    scrollbar-gutter: stable;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+}
+
+/* Share codes and file names: left-to-right, isolated from the RTL page. */
+@utility code-ltr {
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: isolate;
+}
+
+/* Keep long video names from widening the table. */
+@utility cell-clamp {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
