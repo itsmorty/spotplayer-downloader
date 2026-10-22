@@ -41,7 +41,18 @@ const PHASE_CLASS: Record<ProgressPhase, string> = {
 
 const ICONS = {
   stop: '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none" />',
+  success: '<circle cx="12" cy="12" r="9" /><path d="m8.5 12.5 2.5 2.5 4.5-5" />',
+  warning: '<path d="M10.3 3.9 2.6 17a1.6 1.6 0 0 0 1.4 2.4h16a1.6 1.6 0 0 0 1.4-2.4L13.7 3.9a1.9 1.9 0 0 0-3.4 0Z" /><path d="M12 9v4" /><path d="M12 16.5h.01" />',
+  error: '<circle cx="12" cy="12" r="9" /><path d="M12 8v5" /><path d="M12 16h.01" />',
+  info: '<circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><path d="M12 8h.01" />',
 } as const
+
+const ALERT_CLASS: Record<ProgressAlertKind, string> = {
+  success: 'border-success/30 bg-success/10',
+  warning: 'border-warning/30 bg-warning/10',
+  error: 'border-error/30 bg-error/10',
+  info: 'border-info/30 bg-info/10',
+}
 
 let instance = 0
 
@@ -163,10 +174,17 @@ function createProgress(): ProgressHandle {
   )
   overallBlock.style.display = 'none'
 
+  const alertIcon = svgIcon(ICONS.info, 18)
+  alertIcon.setAttribute('class', 'mt-0.5 shrink-0 text-info')
   const alertText = el('span', {})
   const alert = el(
     'div',
-    { class: 'alert alert-info', role: 'status', 'data-progress-alert': '' },
+    {
+      class: `alert items-start border shadow-none text-base-content text-sm leading-6 ${ALERT_CLASS.info}`,
+      role: 'status',
+      'data-progress-alert': '',
+    },
+    alertIcon,
     alertText,
   )
   alert.style.display = 'none'
@@ -246,8 +264,10 @@ function createProgress(): ProgressHandle {
   }
 
   function showAlert(kind: ProgressAlertKind, message: string): void {
-    alert.className = `alert alert-${kind}`
+    alert.className = `alert items-start border shadow-none text-base-content text-sm leading-6 ${ALERT_CLASS[kind]}`
     alert.setAttribute('role', kind === 'error' ? 'alert' : 'status')
+    alertIcon.innerHTML = ICONS[kind]
+    alertIcon.setAttribute('class', `mt-0.5 shrink-0 text-${kind}`)
     alertText.textContent = message
     alert.style.display = ''
   }

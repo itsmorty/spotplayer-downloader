@@ -219,6 +219,7 @@ export const fa = {
     loading: 'در حال بارگذاری…',
   },
   units: {
+    kilobyte: 'کیلوبایت',
     megabyte: 'مگابایت',
     gigabyte: 'گیگابایت',
     second: 'ثانیه',

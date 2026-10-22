@@ -98,7 +98,11 @@ export function createShareCodeInput(opts: ShareCodeInputOptions): ShareCodeInpu
   const errorText = el('span', {})
   const errorAlert = el(
     'div',
-    { id: errorId, class: 'alert alert-error', role: 'alert' },
+    {
+      id: errorId,
+      class: 'alert border border-error/30 bg-error/10 text-base-content shadow-none',
+      role: 'alert',
+    },
     svgIcon(ICONS.alert, 20),
     errorText,
   )

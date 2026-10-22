@@ -7,6 +7,7 @@
 
 import { fa } from '../i18n/fa'
 
+const BYTES_PER_KB = 1024
 const BYTES_PER_MB = 1024 * 1024
 const numberFormat = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
 
@@ -21,8 +22,10 @@ export function formatNumber(value: number): string {
 
 /** Encrypted byte count → «832.4 مگابایت» (one decimal, Latin digits). */
 export function formatBytes(bytes: number): string {
-  const mb = Math.max(0, finiteOrZero(bytes)) / BYTES_PER_MB
-  if (mb === 0) return `0 ${fa.units.megabyte}`
+  const safe = Math.max(0, finiteOrZero(bytes))
+  if (safe === 0) return `0 ${fa.units.megabyte}`
+  if (safe < BYTES_PER_MB) return `${(safe / BYTES_PER_KB).toFixed(1)} ${fa.units.kilobyte}`
+  const mb = safe / BYTES_PER_MB
   if (mb >= 1024) return `${(mb / 1024).toFixed(1)} ${fa.units.gigabyte}`
   return `${mb.toFixed(1)} ${fa.units.megabyte}`
 }

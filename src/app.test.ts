@@ -111,7 +111,7 @@ describe('single-video extraction UI', () => {
 
     expect(extractVideo).toHaveBeenCalledTimes(1)
     expect(q('[data-result-filename]').textContent).toBe('Lesson 1.mp4')
-    expect(q<HTMLElement>('[data-progress-alert]').className).toContain('alert-success')
+    expect(q<HTMLElement>('[data-progress-alert]').className).toContain('bg-success/10')
     expect(q('[data-progress-alert]').textContent).toBe(fa.progress.singleSuccess)
 
     // Finally re-enables everything according to the selection.
@@ -139,7 +139,7 @@ describe('single-video extraction UI', () => {
     expect(q<HTMLElement>('[data-progress-status]').textContent).toBe(fa.progress.cancelling)
 
     await vi.waitFor(() =>
-      expect(q<HTMLElement>('[data-progress-alert]').className).toContain('alert-info'),
+      expect(q<HTMLElement>('[data-progress-alert]').className).toContain('bg-info/10'),
     )
     expect(q('[data-progress-alert]').textContent).toBe(fa.errors.aborted)
     expect(q<HTMLElement>('[data-result-card]').style.display).toBe('none')
@@ -157,7 +157,7 @@ describe('single-video extraction UI', () => {
     q<HTMLButtonElement>('#extract-one').click()
 
     await vi.waitFor(() =>
-      expect(q<HTMLElement>('[data-progress-alert]').className).toContain('alert-error'),
+      expect(q<HTMLElement>('[data-progress-alert]').className).toContain('bg-error/10'),
     )
     expect(q('[data-progress-alert]').textContent).toBe(fa.errors.http(403))
     expect(q<HTMLElement>('[data-progress-status]').textContent).toBe(fa.progress.failed)
@@ -204,7 +204,7 @@ describe('playlist extraction UI', () => {
 
     await vi.waitFor(() => expect(savedNames).toEqual(['Lesson 1.mp4', 'Lesson 2.mp4']))
     await vi.waitFor(() =>
-      expect(q<HTMLElement>('[data-progress-alert]').className).toContain('alert-success'),
+      expect(q<HTMLElement>('[data-progress-alert]').className).toContain('bg-success/10'),
     )
 
     expect(extractVideo).toHaveBeenCalledTimes(2)
@@ -230,7 +230,7 @@ describe('playlist extraction UI', () => {
     q<HTMLButtonElement>('#download-all').click()
 
     await vi.waitFor(() =>
-      expect(q<HTMLElement>('[data-progress-alert]').className).toContain('alert-warning'),
+      expect(q<HTMLElement>('[data-progress-alert]').className).toContain('bg-warning/10'),
     )
 
     expect(q('[data-progress-alert]').textContent).toBe(fa.progress.summaryPartial(1, 1))

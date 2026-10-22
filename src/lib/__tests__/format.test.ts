@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { formatBytes, formatDuration, formatNumber, formatPercent } from '../format'
 
 describe('formatBytes', () => {
+  it('uses kilobytes below one megabyte', () => {
+    expect(formatBytes(33 * 1024)).toBe('33.0 کیلوبایت')
+    expect(formatBytes(1023)).toBe('1.0 کیلوبایت')
+    expect(formatBytes(1024 * 1024 - 1)).toBe('1024.0 کیلوبایت')
+  })
+
   it('renders megabytes with one decimal and the Persian unit', () => {
     expect(formatBytes(1024 * 1024)).toBe('1.0 مگابایت')
     expect(formatBytes(42.4 * 1024 * 1024)).toBe('42.4 مگابایت')
@@ -17,6 +23,7 @@ describe('formatBytes', () => {
   it('clamps invalid values to zero without a decimal', () => {
     expect(formatBytes(0)).toBe('0 مگابایت')
     expect(formatBytes(-5)).toBe('0 مگابایت')
+    expect(formatBytes(-0.5 * 1024)).toBe('0 مگابایت')
     expect(formatBytes(Number.NaN)).toBe('0 مگابایت')
   })
 })

@@ -81,13 +81,15 @@ describe('createProgress', () => {
     expect(status.textContent).toBe(fa.progress.saving)
 
     progress.showAlert('error', fa.errors.network)
-    expect(alert.className).toContain('alert-error')
+    expect(alert.className).toContain('border-error/30')
+    expect(alert.className).toContain('bg-error/10')
     expect(alert.getAttribute('role')).toBe('alert')
     expect(alert.textContent).toBe(fa.errors.network)
     expect(alert.style.display).toBe('')
 
     progress.showAlert('success', fa.progress.singleSuccess)
-    expect(alert.className).toContain('alert-success')
+    expect(alert.className).toContain('border-success/30')
+    expect(alert.className).toContain('bg-success/10')
     expect(alert.getAttribute('role')).toBe('status')
 
     progress.hideAlert()
