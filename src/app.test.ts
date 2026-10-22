@@ -2,11 +2,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { startApp } from './app'
 import { ExtractError, extractVideo } from './lib/extract'
+import { saveBlob } from './lib/download'
 import { fa } from './i18n/fa'
 
 vi.mock('./lib/extract', async () => {
   const actual = await vi.importActual<typeof import('./lib/extract')>('./lib/extract')
   return { ...actual, extractVideo: vi.fn() }
+})
+
+vi.mock('./lib/download', async () => {
+  const actual = await vi.importActual<typeof import('./lib/download')>('./lib/download')
+  return { ...actual, saveBlob: vi.fn(async () => true) }
 })
 
 const CODE_JSON = JSON.stringify({
@@ -74,6 +80,8 @@ beforeEach(() => {
     value: vi.fn(),
   })
   vi.mocked(extractVideo).mockReset()
+  vi.mocked(saveBlob).mockReset()
+  vi.mocked(saveBlob).mockResolvedValue(true)
 })
 
 afterEach(() => {
@@ -154,5 +162,82 @@ describe('single-video extraction UI', () => {
     expect(q('[data-progress-alert]').textContent).toBe(fa.errors.http(403))
     expect(q<HTMLElement>('[data-progress-status]').textContent).toBe(fa.progress.failed)
     expect(q<HTMLButtonElement>('#extract-one').disabled).toBe(false)
+  })
+})
+
+describe('playlist extraction UI', () => {
+  it('saves two selected videos strictly one after the other', async () => {
+    mockProgress()
+    startApp(q<HTMLElement>('#app'))
+    await loadCourse()
+    select('v1')
+    select('v2')
+
+    let releaseFirst: () => void = () => {}
+    const firstSave = new Promise<boolean>((resolve) => {
+      releaseFirst = () => resolve(true)
+    })
+    const savedNames: string[] = []
+    vi.mocked(saveBlob).mockImplementation(async (_blob, filename) => {
+      savedNames.push(filename)
+      if (savedNames.length === 1) return firstSave
+      return true
+    })
+
+    q<HTMLButtonElement>('#download-all').click()
+
+    expect(q<HTMLElement>('[data-progress-card]').getAttribute('data-mode')).toBe('queue')
+    expect(q<HTMLButtonElement>('#extract-one').disabled).toBe(true)
+    expect(q<HTMLTextAreaElement>('#share-code-mount textarea').disabled).toBe(true)
+
+    await vi.waitFor(() => expect(savedNames).toEqual(['Lesson 1.mp4']))
+    // The first file is still being saved: item 2 must not have started.
+    expect(extractVideo).toHaveBeenCalledTimes(1)
+    expect(q('[data-video-id="v1"] td:last-child .badge').textContent).toContain(
+      fa.status.running,
+    )
+    expect(q('[data-video-id="v2"] td:last-child .badge').textContent).toContain(
+      fa.status.pending,
+    )
+
+    releaseFirst()
+
+    await vi.waitFor(() => expect(savedNames).toEqual(['Lesson 1.mp4', 'Lesson 2.mp4']))
+    await vi.waitFor(() =>
+      expect(q<HTMLElement>('[data-progress-alert]').className).toContain('alert-success'),
+    )
+
+    expect(extractVideo).toHaveBeenCalledTimes(2)
+    expect(q('[data-progress-alert]').textContent).toBe(fa.progress.summarySuccess(2))
+    expect(q('[data-video-id="v1"] td:last-child .badge').textContent).toContain(fa.status.done)
+    expect(q('[data-video-id="v2"] td:last-child .badge').textContent).toContain(fa.status.done)
+    expect(q<HTMLButtonElement>('#download-all').disabled).toBe(false)
+    expect(q<HTMLTextAreaElement>('#share-code-mount textarea').disabled).toBe(false)
+  })
+
+  it('continues after a failed item and shows a warning summary', async () => {
+    vi.mocked(extractVideo).mockImplementation(async (_code, video) => {
+      if (video.id === 'v1') {
+        throw new ExtractError('http', 'segment 0: HTTP 500', { status: 500 })
+      }
+      return new Blob([video.id], { type: 'video/mp4' })
+    })
+    startApp(q<HTMLElement>('#app'))
+    await loadCourse()
+    select('v1')
+    select('v2')
+
+    q<HTMLButtonElement>('#download-all').click()
+
+    await vi.waitFor(() =>
+      expect(q<HTMLElement>('[data-progress-alert]').className).toContain('alert-warning'),
+    )
+
+    expect(q('[data-progress-alert]').textContent).toBe(fa.progress.summaryPartial(1, 1))
+    expect(extractVideo).toHaveBeenCalledTimes(2)
+    const failedBadge = q<HTMLElement>('[data-video-id="v1"] td:last-child .badge')
+    expect(failedBadge.textContent).toContain(fa.status.error)
+    expect(failedBadge.title).toBe(fa.errors.http(500))
+    expect(q('[data-video-id="v2"] td:last-child .badge').textContent).toContain(fa.status.done)
   })
 })

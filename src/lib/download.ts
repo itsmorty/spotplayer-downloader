@@ -61,6 +61,17 @@ function isAbortError(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { name?: unknown }).name === 'AbortError'
 }
 
+/**
+ * The picker throws these when the call is no longer tied to a user
+ * activation (common for the second and later items of a playlist) or when the
+ * embedding context forbids it. Both are recoverable via an anchor download.
+ */
+function isPickerFallbackError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  const name = (error as { name?: unknown }).name
+  return name === 'NotAllowedError' || name === 'SecurityError'
+}
+
 async function saveWithPicker(
   picker: ShowSaveFilePicker,
   blob: Blob,
@@ -70,8 +81,13 @@ async function saveWithPicker(
   try {
     handle = await picker({ suggestedName: name, types: [MP4_TYPE] })
   } catch (error) {
-    // A user cancel is silent.
+    // A user cancel is silent; a stale/missing activation falls back to an
+    // anchor download so a playlist item is not lost.
     if (isAbortError(error)) return false
+    if (isPickerFallbackError(error)) {
+      saveWithAnchor(blob, name)
+      return true
+    }
     throw error
   }
 
@@ -115,7 +131,8 @@ function saveWithAnchor(blob: Blob, name: string): void {
  *
  * Resolves `true` once the file is written or handed to the browser's download
  * manager, and `false` when the user cancels the picker (silent by design).
- * Other failures are rethrown.
+ * Picker permission/activation errors fall back to an anchor download; other
+ * failures are rethrown.
  */
 export async function saveBlob(blob: Blob, filename: string): Promise<boolean> {
   const name = sanitizeFilename(filename)

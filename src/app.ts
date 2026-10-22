@@ -10,8 +10,10 @@ import { createResultPanel } from './features/result-panel'
 import { extractErrorMessage, isAbortFailure } from './features/extract-errors'
 import { createShareCodeInput } from './features/share-code-input'
 import { createVideoList } from './features/video-list'
-import { extractVideo } from './lib/extract'
+import { saveBlob } from './lib/download'
+import { extractVideo, ExtractError } from './lib/extract'
 import { formatBytes } from './lib/format'
+import { runQueue, type QueueItem } from './lib/queue'
 import type { ShareCode, Video } from './lib/types'
 import { el } from './ui/el'
 import { applyTheme, resolveInitialTheme, toggleTheme, type Theme } from './ui/theme'
@@ -446,10 +448,148 @@ export function startApp(root: HTMLElement): void {
     }
   }
 
+  async function extractPlaylist(videos: Video[]): Promise<void> {
+    if (!currentCode || videos.length === 0) return
+    const run = beginRun()
+    if (!run) return
+    const code = currentCode
+    const signal = run.controller.signal
+    const total = videos.length
+    const items: QueueItem[] = videos.map((video) => ({ video, status: 'pending' }))
+
+    resultPanel.clear()
+    progress.show('queue')
+    progress.setCancelEnabled(true)
+    progress.setStatus(fa.progress.starting)
+    progress.setItemProgress(0, 1)
+    progress.setOverallProgress(0, total)
+    progress.setOverallLabel(fa.progress.itemOf(1, total))
+
+    videoList.resetStatuses()
+    for (const item of items) videoList.setItemStatus(item.video.id, 'pending')
+
+    let finished = 0
+    let currentFraction = 0
+
+    const updateOverall = (): void => {
+      progress.setOverallProgress(finished + currentFraction, total)
+    }
+
+    // Extraction + save happen inside one queue step, so the next item cannot
+    // start until the current file has been handed to the browser.
+    const runOne = async (item: QueueItem): Promise<Blob> => {
+      try {
+        const blob = await extractVideo(code, item.video, {
+          signal,
+          onProgress: (event) => {
+            if (!isCurrent(run)) return
+            currentFraction = event.total > 0 ? event.done / event.total : 0
+            progress.setPhase(event.phase)
+            progress.setItemProgress(event.done, event.total)
+            progress.setStatus(fa.progress.phase[event.phase])
+            updateOverall()
+          },
+        })
+        if (!isCurrent(run)) throw new DOMException('aborted', 'AbortError')
+
+        // During saving the current item counts as complete in the overall bar.
+        currentFraction = 1
+        progress.setPhase(null)
+        progress.setItemProgress(1, 1)
+        progress.setStatus(fa.progress.saving)
+        updateOverall()
+
+        const saved = await saveBlob(blob, `${item.video.name}.mp4`)
+        if (!saved) throw new Error(fa.errors.saveCancelled)
+        return blob
+      } catch (error) {
+        if (isAbortFailure(error)) throw error
+        if (error instanceof ExtractError) throw new Error(extractErrorMessage(error))
+        throw error
+      }
+    }
+
+    try {
+      await runQueue(
+        items,
+        runOne,
+        {
+          onItemUpdate: (item) => {
+            if (!isCurrent(run)) return
+
+            if (item.status === 'running') {
+              currentFraction = 0
+              progress.setPhase(null)
+              progress.setItemProgress(0, 1)
+              progress.setStatus(fa.progress.starting)
+              progress.setOverallLabel(fa.progress.itemOf(items.indexOf(item) + 1, total))
+              videoList.setItemStatus(item.video.id, 'running')
+              updateOverall()
+              return
+            }
+
+            if (item.status === 'done') {
+              finished++
+              currentFraction = 0
+              progress.setItemProgress(1, 1)
+              videoList.setItemStatus(item.video.id, 'done')
+              updateOverall()
+              return
+            }
+
+            if (item.status === 'error') {
+              finished++
+              currentFraction = 0
+              const message =
+                item.error === 'aborted' || signal.aborted
+                  ? fa.errors.aborted
+                  : item.error ?? fa.errors.unknown
+              videoList.setItemStatus(item.video.id, 'error', message)
+              updateOverall()
+            }
+          },
+          onItemDone: () => {
+            // Saved inside `runOne`; the UI state is handled on `done` above.
+          },
+        },
+        signal,
+      )
+
+      if (!isCurrent(run)) return
+
+      const done = items.filter((item) => item.status === 'done').length
+      const failed = items.filter((item) => item.status === 'error').length
+
+      if (signal.aborted) {
+        progress.setStatus(fa.progress.stopped)
+        progress.showAlert('info', fa.progress.summaryAborted(done, total))
+        notify(fa.toast.queueAborted, 'info')
+      } else if (failed === 0) {
+        progress.setStatus(fa.progress.done)
+        progress.showAlert('success', fa.progress.summarySuccess(done))
+        notify(fa.toast.queueDone, 'success')
+      } else {
+        progress.setStatus(fa.progress.failed)
+        progress.showAlert('warning', fa.progress.summaryPartial(done, failed))
+        notify(fa.toast.queuePartial(done, failed), 'info')
+      }
+      progress.setCancelEnabled(false)
+    } finally {
+      endRun(run)
+    }
+  }
+
   function handleLoaded(code: ShareCode): void {
+    // A new share code invalidates any in-flight run and its result.
+    if (activeRun) {
+      activeRun.controller.abort()
+      activeRun = null
+      setBusy(false)
+    }
     currentCode = code
     resultPanel.clear()
     progress.hide()
+    progress.setCancelEnabled(false)
     const totalSize = code.videos.reduce((total, video) => total + video.size, 0)
 
     summary.name.textContent = code.name.trim() === '' ? fa.course.unnamed : code.name
@@ -478,8 +618,9 @@ export function startApp(root: HTMLElement): void {
   })
 
   actionBar.downloadAll.addEventListener('click', () => {
-    if (!currentCode || videoList.getSelected().length === 0 || busy) return
-    // Playlist extraction is wired in the next task.
+    const selected = videoList.getSelected()
+    if (!currentCode || selected.length === 0 || busy) return
+    void extractPlaylist(selected)
   })
 
   const main = el(

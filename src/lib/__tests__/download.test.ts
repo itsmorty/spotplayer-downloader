@@ -155,6 +155,24 @@ describe('saveBlob with File System Access', () => {
     expect(clicked).toEqual([])
   })
 
+  it.each(['NotAllowedError', 'SecurityError'])(
+    'falls back to an anchor when the picker throws %s',
+    async (name) => {
+      const picker = vi.fn(async () => {
+        throw new DOMException('user activation is required', name)
+      })
+      vi.stubGlobal('showSaveFilePicker', picker)
+      const { create } = stubObjectUrls()
+      const clicked = captureClicks()
+
+      await expect(saveBlob(new Blob(['x']), 'lesson.mp4')).resolves.toBe(true)
+
+      expect(picker).toHaveBeenCalledTimes(1)
+      expect(create).toHaveBeenCalledTimes(1)
+      expect(clicked).toEqual([{ download: 'lesson.mp4', href: 'blob:fake-url' }])
+    },
+  )
+
   it('rethrows other picker errors', async () => {
     vi.stubGlobal(
       'showSaveFilePicker',

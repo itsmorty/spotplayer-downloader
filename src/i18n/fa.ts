@@ -130,6 +130,11 @@ export const fa = {
     failed: 'استخراج ناموفق بود.',
     stopped: 'عملیات متوقف شد.',
     singleSuccess: 'ویدیو با موفقیت استخراج شد.',
+    summarySuccess: (total: number) => `همهٔ ${count(total)} ویدیو با موفقیت ذخیره شد.`,
+    summaryPartial: (done: number, failed: number) =>
+      `${count(done)} ویدیو ذخیره شد و ${count(failed)} ویدیو ناموفق بود.`,
+    summaryAborted: (done: number, total: number) =>
+      `عملیات لغو شد؛ ${count(done)} از ${count(total)} ویدیو ذخیره شد.`,
   },
   status: {
     idle: 'آماده',
@@ -164,6 +169,7 @@ export const fa = {
     remux: 'ساخت فایل MP4 ممکن نشد.',
     emptyVideo: 'این ویدیو داده‌ای برای استخراج ندارد.',
     savePermission: 'اجازهٔ ذخیرهٔ فایل داده نشد.',
+    saveCancelled: 'ذخیرهٔ فایل توسط کاربر لغو شد.',
     save: 'ذخیرهٔ فایل ممکن نشد.',
     copy: 'کپی در حافظه ممکن نشد.',
   },
@@ -173,6 +179,8 @@ export const fa = {
     extractFailed: 'استخراج ویدیو با خطا مواجه شد.',
     extractAborted: 'استخراج ویدیو لغو شد.',
     queueDone: 'همهٔ ویدیوهای انتخاب‌شده ذخیره شدند.',
+    queuePartial: (done: number, failed: number) =>
+      `${count(done)} ویدیو ذخیره شد؛ ${count(failed)} ویدیو ناموفق بود.`,
     queueAborted: 'دانلود گروهی لغو شد.',
     saved: 'فایل ذخیره شد.',
     saveCancelled: 'ذخیرهٔ فایل لغو شد.',
