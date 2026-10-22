@@ -11,7 +11,7 @@ A 100 % client-side web app that turns a SpotPlayer share code into downloadable
 - Extracts **a single video** or **a whole playlist** (selected videos are processed strictly one after another).
 - Runs **100 % in the browser**: no server, no upload, no ffmpeg, no WASM, no React.
 - Persian **RTL UI** with a **light/dark theme toggle** that persists across reloads.
-- Shows per-item and overall progress for playlists, and previews each finished file in a `<video>` element before saving.
+- Previews a single extracted video in a `<video>` element before saving; playlist items are saved one at a time with per-item and overall progress.
 
 ### How it works
 
@@ -35,7 +35,7 @@ This is an **unofficial** tool and is **not affiliated with, endorsed by, or sup
 
 1. Open the in-app **Help** dialog (the help button in the header) and copy the **bookmarklet**.
 2. In SpotPlayer, sign in and **open a video once** so the player has stored the license and course data locally — activation is required.
-3. Run the bookmarklet on the SpotPlayer course page. It reads the locally stored data and copies the share code (it falls back to a prompt if the Clipboard API is unavailable).
+3. Create a new browser bookmark, paste the copied `javascript:` code as its URL, and then run that bookmark on the SpotPlayer course page. It reads the locally stored data and copies the share code (it falls back to a prompt if the Clipboard API is unavailable).
 4. Paste the code into this app.
 
 Notes and caveats:
@@ -108,7 +108,7 @@ spotplayer-downloader/
 
 ### Tests and validation
 
-- **Vitest** unit tests cover the remuxer (synthetic `mp4s` fixture round-trip), XOR round-trip, share-code decoding, extraction against a mocked `fetch`, the sequential queue, formatting, and theme persistence — currently **145 tests in 17 files**.
+- **Vitest** unit tests cover the remuxer (synthetic `mp4s` fixture round-trip), XOR round-trip, share-code decoding, extraction against a mocked `fetch`, the sequential queue, formatting, and theme persistence — currently **147 tests in 17 files**.
 - There are **no automated browser/E2E tests**; validation is unit tests plus the manual checklist above.
 - `pnpm build` type-checks and emits a static `dist/`.
 
@@ -125,7 +125,7 @@ MIT — see [LICENSE](./LICENSE).
 - **یک ویدیو** یا **کل playlist** (فهرست انتخابی) را استخراج می‌کند؛ ویدیوهای یک playlist به‌صورت **کاملاً متوالی** و یکی‌یکی پردازش می‌شوند.
 - **۱۰۰٪ در مرورگر** اجرا می‌شود: بدون سرور، بدون آپلود، بدون ffmpeg، بدون WASM و بدون React.
 - رابط کاربری **فارسی و راست‌به‌چپ** با **کلید تغییر پوستهٔ روشن/تاریک** که انتخاب آن پس از بارگذاری مجدد حفظ می‌شود.
-- برای playlist، پیشرفت هر آیتم و پیشرفت کلی را نشان می‌دهد و هر فایل ساخته‌شده را قبل از ذخیره در یک عنصر `<video>` پیش‌نمایش می‌دهد.
+- یک ویدیوی استخراج‌شده را قبل از ذخیره در یک عنصر `<video>` پیش‌نمایش می‌دهد؛ آیتم‌های playlist یکی‌یکی و با پیشرفت هر آیتم و پیشرفت کلی ذخیره می‌شوند.
 
 ### چطور کار می‌کند؟
 
@@ -149,7 +149,7 @@ MIT — see [LICENSE](./LICENSE).
 
 1. در برنامه، دیالوگ **راهنما** را باز کنید (دکمهٔ راهنما در سربرگ) و **بوکمارکلت** را کپی کنید.
 2. در اسپات‌پلیر وارد شوید و **یک‌بار یک ویدیو را باز کنید** تا بازپخش‌کننده اطلاعات لایسنس و دوره را به‌صورت محلی ذخیره کند — فعال‌سازی لازم است.
-3. بوکمارکلت را در صفحهٔ دورهٔ اسپات‌پلیر اجرا کنید. دادهٔ ذخیره‌شدهٔ محلی را می‌خواند و کد اشتراک را کپی می‌کند (اگر Clipboard API در دسترس نباشد، کد را در یک prompt نشان می‌دهد).
+3. یک نشانک جدید در مرورگر بسازید، کد `javascript:` کپی‌شده را در فیلد آدرس آن بچسبانید و سپس آن نشانک را در صفحهٔ دورهٔ اسپات‌پلیر اجرا کنید. دادهٔ ذخیره‌شدهٔ محلی را می‌خواند و کد اشتراک را کپی می‌کند (اگر Clipboard API در دسترس نباشد، کد را در یک prompt نشان می‌دهد).
 4. کد را در این برنامه بچسبانید.
 
 نکته‌ها و محدودیت‌ها:
@@ -222,7 +222,7 @@ spotplayer-downloader/
 
 ### تست و اعتبارسنجی
 
-- تست‌های واحد **Vitest** شامل remuxer (رفت‌وبرگشت با fixture مصنوعی `mp4s`)، رفت‌وبرگشت XOR، رمزگشایی کد اشتراک، استخراج با `fetch` شبیه‌سازی‌شده، صف متوالی، قالب‌بندی اعداد و ماندگاری پوسته است — در حال حاضر **۱۴۵ تست در ۱۷ فایل**.
+- تست‌های واحد **Vitest** شامل remuxer (رفت‌وبرگشت با fixture مصنوعی `mp4s`)، رفت‌وبرگشت XOR، رمزگشایی کد اشتراک، استخراج با `fetch` شبیه‌سازی‌شده، صف متوالی، قالب‌بندی اعداد و ماندگاری پوسته است — در حال حاضر **۱۴۷ تست در ۱۷ فایل**.
 - هیچ تست خودکار مرورگر/E2E وجود ندارد؛ اعتبارسنجی شامل تست‌های واحد و چک‌لیست دستی بالاست.
 - `pnpm build` نوع‌ها را بررسی و یک `dist/` استاتیک تولید می‌کند.
 
