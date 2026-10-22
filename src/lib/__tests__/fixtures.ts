@@ -52,6 +52,11 @@ export interface Mp4sFixtureOptions {
   durationSec?: number
   /** Value written into every packet's flags byte. The parser must not require 0. */
   flags?: number
+  /**
+   * Minimum NAL payload length for video samples. Used by tests that need a
+   * container larger than one CDN segment (2 MiB).
+   */
+  videoSampleSize?: number
 }
 
 function writeU16(value: number): Uint8Array {
@@ -109,10 +114,12 @@ function makeNal(header: number, index: number, length: number): Uint8Array {
 }
 
 /** A valid AVCC sample: one or more `[u32 length][NAL]` units. */
-function makeVideoSample(index: number, keyframe: boolean): Uint8Array {
+function makeVideoSample(index: number, keyframe: boolean, minSampleSize?: number): Uint8Array {
   const nals: Uint8Array[] = []
   if (keyframe) nals.push(makeNal(0x67, index, 8 + (index % 3)))
-  nals.push(makeNal(keyframe ? 0x65 : 0x41, index, 24 + ((index * 13) % 80)))
+  const baseLength = 24 + ((index * 13) % 80)
+  const length = minSampleSize !== undefined && minSampleSize > baseLength ? minSampleSize : baseLength
+  nals.push(makeNal(keyframe ? 0x65 : 0x41, index, length))
   return concat(nals.map((nal) => concat([writeU32(nal.length), nal])))
 }
 
@@ -148,7 +155,11 @@ export function makeMp4s(options: Mp4sFixtureOptions = {}): Uint8Array {
   const packets: Packet[] = []
   for (let i = 0; i < Math.max(videoFrames, audioFrames); i++) {
     if (i < videoFrames) {
-      packets.push({ type: i === 0 || i % 3 === 0 ? 2 : 1, data: makeVideoSample(i, i === 0 || i % 3 === 0) })
+      const isKeyframe = i === 0 || i % 3 === 0
+      packets.push({
+        type: isKeyframe ? 2 : 1,
+        data: makeVideoSample(i, isKeyframe, options.videoSampleSize),
+      })
     }
     if (i < audioFrames) packets.push({ type: 0, data: makeAudioSample(i) })
   }
