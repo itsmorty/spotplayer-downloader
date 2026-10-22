@@ -5,6 +5,8 @@
  */
 
 import { fa, selectedCount, videosCount } from './i18n/fa'
+import { createDisclaimer } from './features/disclaimer'
+import { openHelpDialog } from './features/help-dialog'
 import { createProgress } from './features/progress'
 import { createResultPanel } from './features/result-panel'
 import { extractErrorMessage, isAbortFailure } from './features/extract-errors'
@@ -97,7 +99,10 @@ function createThemeToggle(initial: Theme): HTMLButtonElement {
   return button
 }
 
-function createHeader(theme: Theme): HTMLElement {
+function createHeader(theme: Theme, onHelp: () => void): HTMLElement {
+  const helpButton = createHelpButton()
+  helpButton.addEventListener('click', onHelp)
+
   return el(
     'header',
     {
@@ -110,7 +115,7 @@ function createHeader(theme: Theme): HTMLElement {
       el(
         'div',
         { class: 'ms-auto flex items-center gap-1' },
-        createHelpButton(),
+        helpButton,
         createThemeToggle(theme),
       ),
     ),
@@ -365,6 +370,8 @@ export function startApp(root: HTMLElement): void {
   const shareMount = el('div', { id: 'share-code-mount' })
   const shareInput = createShareCodeInput({ onLoaded: handleLoaded })
   shareMount.append(shareInput.element)
+
+  const disclaimer = createDisclaimer({ onOpenHelp: openHelpDialog })
 
   function setBusy(next: boolean): void {
     busy = next
@@ -631,6 +638,7 @@ export function startApp(root: HTMLElement): void {
         'mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8',
     },
     createIntro(),
+    ...(disclaimer ? [disclaimer] : []),
     shareMount,
     courseMount,
     listMount,
@@ -643,7 +651,7 @@ export function startApp(root: HTMLElement): void {
     'div',
     { class: 'flex min-h-dvh flex-col bg-base-200/40' },
     skipLink,
-    createHeader(theme),
+    createHeader(theme, openHelpDialog),
     main,
     createFooter(),
   )
