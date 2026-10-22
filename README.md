@@ -48,6 +48,15 @@ Notes and caveats:
 - **Raw JSON share codes are also accepted**, so a code produced by other means works too.
 - The bookmarklet is built from the export logic validated in spike 003. Live end-to-end verification of the bookmarklet against a signed-in SpotPlayer session is still **partial** — if the stored data shape differs, the bookmarklet may need an update.
 
+#### How to add the Bookmarklet
+
+The in-app **Help** dialog offers the same guide with numbered steps.
+
+- **Chrome:** copy the code, then press `Ctrl+Shift+B` to show the bookmarks bar or open **⋮ → Bookmarks and lists → Bookmark manager**; choose **⋮ → Add new bookmark**, name it (for example `SpotPlayer`), and paste the `javascript:` code into the URL field. In **Edge** the same path uses **Favorites → Manage favorites** and **Add new favorite**.
+- **Firefox:** copy the code, open the Library with `Ctrl+Shift+O` (**Bookmarks → Manage bookmarks**) or show the toolbar with `Ctrl+Shift+B`; choose **Organize → New Bookmark** (or right-click → **New Bookmark**), then paste the code into **Location**.
+- Keep the `javascript:` prefix. Run the bookmark on `app.spotplayer.ir` after signing in and opening a video once.
+- Official documentation: [Chrome (Persian)](https://support.google.com/chrome/answer/188842?hl=fa), [Firefox bookmarklets (Persian)](https://support.mozilla.org/fa/kb/bookmarklets-perform-common-web-page-tasks), [Firefox bookmarks (Persian)](https://support.mozilla.org/fa/kb/bookmarks-firefox).
+
 ### Development quickstart
 
 Requirements: **Node 22.12+ or 24** (Node 26 is fine) and **pnpm**.
@@ -112,7 +121,7 @@ spotplayer-downloader/
 
 ### Tests and validation
 
-- **Vitest** unit tests cover the remuxer (synthetic `mp4s` fixture round-trip), XOR round-trip, share-code decoding, extraction against a mocked `fetch`, the sequential queue, formatting, and theme persistence — currently **147 tests in 17 files**.
+- **Vitest** unit tests cover the remuxer (synthetic `mp4s` fixture round-trip), XOR round-trip, share-code decoding, extraction against a mocked `fetch`, the sequential queue, formatting, and theme persistence — currently **153 tests in 18 files**.
 - There are **no automated browser/E2E tests**; validation is unit tests plus the manual checklist above.
 - `pnpm build` type-checks and emits a static `dist/`.
 
@@ -153,16 +162,25 @@ MIT — see [LICENSE](./LICENSE).
 
 ### چطور کد اشتراک بگیریم؟
 
-1. در برنامه، دیالوگ **راهنما** را باز کنید (دکمهٔ راهنما در سربرگ) و **بوکمارکلت** را کپی کنید.
+1. در برنامه، دیالوگ **راهنما** را باز کنید (دکمهٔ راهنما در سربرگ) و کد **Bookmarklet** را کپی کنید.
 2. در اسپات‌پلیر وارد شوید و **یک‌بار یک ویدیو را باز کنید** تا بازپخش‌کننده اطلاعات لایسنس و دوره را به‌صورت محلی ذخیره کند — فعال‌سازی لازم است.
-3. یک نشانک جدید در مرورگر بسازید، کد `javascript:` کپی‌شده را در فیلد آدرس آن بچسبانید و سپس آن نشانک را در صفحهٔ دورهٔ اسپات‌پلیر اجرا کنید. دادهٔ ذخیره‌شدهٔ محلی را می‌خواند و کد اشتراک را کپی می‌کند (اگر Clipboard API در دسترس نباشد، کد را در یک prompt نشان می‌دهد).
+3. یک بوکمارک جدید در مرورگر بسازید، کد `javascript:` کپی‌شده را در فیلد آدرس آن بچسبانید و سپس آن بوکمارک را در صفحهٔ دورهٔ اسپات‌پلیر اجرا کنید. دادهٔ ذخیره‌شدهٔ محلی را می‌خواند و کد اشتراک را کپی می‌کند (اگر Clipboard API در دسترس نباشد، کد را در یک prompt نشان می‌دهد).
 4. کد را در این برنامه بچسبانید.
 
 نکته‌ها و محدودیت‌ها:
 
 - Clipboard API به **secure context** (HTTPS یا `localhost`) و تعامل کاربر نیاز دارد. روی HTTP ساده یا مرورگرهای محدود، از prompt و کپی دستی استفاده کنید.
 - **کد اشتراک JSON خام هم پذیرفته می‌شود**؛ پس کدی که با روش دیگری ساخته شده هم کار می‌کند.
-- بوکمارکلت بر پایهٔ منطق خروجی اعتبارسنجی‌شده در spike 003 ساخته شده است، اما تأیید سرتاسری آن روی یک نشست واردشدهٔ واقعی اسپات‌پلیر هنوز **ناقص** است؛ اگر شکل دادهٔ ذخیره‌شده متفاوت باشد، ممکن است بوکمارکلت نیاز به به‌روزرسانی داشته باشد.
+- Bookmarklet بر پایهٔ منطق خروجی اعتبارسنجی‌شده در spike 003 ساخته شده است، اما تأیید سرتاسری آن روی یک نشست واردشدهٔ واقعی اسپات‌پلیر هنوز **ناقص** است؛ اگر شکل دادهٔ ذخیره‌شده متفاوت باشد، ممکن است Bookmarklet نیاز به به‌روزرسانی داشته باشد.
+
+#### ساخت Bookmarklet در مرورگر
+
+راهنمای گام‌به‌گام همین موضوع در دیالوگ **راهنما**ی برنامه هم موجود است.
+
+- **Chrome:** کد را کپی کنید؛ با `Ctrl+Shift+B` نوار بوکمارک‌ها را نمایش دهید یا از **⋮ → Bookmarks and lists → Bookmark manager** استفاده کنید. سپس **⋮ → Add new bookmark** را بزنید، نامی مثل `SpotPlayer` بگذارید و کد `javascript:` را در فیلد URL بچسبانید. در **Edge** همین مسیر با نام‌های **Favorites → Manage favorites** و **Add new favorite** است.
+- **Firefox:** کد را کپی کنید؛ کتابخانه را با `Ctrl+Shift+O` (**Bookmarks → Manage bookmarks**) باز کنید یا نوار ابزار را با `Ctrl+Shift+B` نمایش دهید. سپس **Organize → New Bookmark** (یا راست‌کلیک → **New Bookmark**) را انتخاب کنید و کد را در **Location** بچسبانید.
+- پیشوند `javascript:` را نگه دارید و بوکمارک را فقط در `app.spotplayer.ir` و پس از ورود و یک‌بار باز کردن یک ویدیو اجرا کنید.
+- مستندات رسمی: [Chrome (فارسی)](https://support.google.com/chrome/answer/188842?hl=fa)، [Bookmarklet در Firefox (فارسی)](https://support.mozilla.org/fa/kb/bookmarklets-perform-common-web-page-tasks)، [بوکمارک‌ها در Firefox (فارسی)](https://support.mozilla.org/fa/kb/bookmarks-firefox).
 
 ### شروع سریع برای توسعه
 
@@ -185,7 +203,7 @@ pnpm preview    # ارائهٔ نسخهٔ production به‌صورت محلی
 - [ ] **یک ویدیو:** یک کد اشتراک واقعی را بچسبانید و ویدیوی ۱۷ را استخراج کنید. متادیتای `<video>` باید **حدود ۴۲۹٫۴۱۸۶۶۷ ثانیه** و **۸۳۲×۴۷۰** را نشان دهد و MP4 دانلودشده تا انتها با صدای هم‌تراز پخش شود.
 - [ ] **Playlist:** دو ویدیو را انتخاب کنید و «دانلود همه» را اجرا کنید. دو فایل MP4 **به‌ترتیب و متوالی** (نه هم‌زمان) ساخته می‌شوند، هر کدام وضعیت خودش را دارد و پیشرفت هر آیتم و پیشرفت کلی جلو می‌رود.
 - [ ] **پوسته:** پوستهٔ روشن/تاریک را عوض کنید، صفحه را دوباره بارگذاری کنید و ببینید انتخاب حفظ می‌شود (و در نخستین بازدید، ترجیح سیستم‌عامل لحاظ می‌شود).
-- [ ] **راهنما + بوکمارکلت:** دیالوگ راهنما را باز کنید، بوکمارکلت را کپی کنید و مطمئن شوید کلیپ‌بورد یک URL تک‌خطی `javascript:` دارد.
+- [ ] **راهنما + Bookmarklet:** دیالوگ راهنما را باز کنید، کد Bookmarklet را کپی کنید و مطمئن شوید کلیپ‌بورد یک URL تک‌خطی `javascript:` دارد.
 - [ ] **سلب مسئولیت:** در نمایه/حافظهٔ تازه، پیام سلب مسئولیت فقط یک‌بار نمایش داده می‌شود و پس از پذیرش و بارگذاری مجدد دیگر نمی‌آید.
 - [ ] **فایل بزرگ:** در Chrome یا Edge، ویدیوی **۱٫۳ گیگابایتی** را با دیالوگ ذخیرهٔ File System Access استخراج کنید. OOM رخ نمی‌دهد، اوج حافظه حدود **۲ برابر حجم فایل** می‌ماند و فایل ذخیره می‌شود. برای فایل‌های خیلی بزرگ، نمایش متادیتا/پیش‌نمایش ممکن است زمان ببرد.
 - [ ] **نسخهٔ Pages:** بررسی یک ویدیو، playlist دورودیویی و پوسته را روی URL منتشرشدهٔ GitHub Pages (زیرمسیر پروژه) تکرار کنید.
@@ -206,7 +224,7 @@ pnpm preview    # ارائهٔ نسخهٔ production به‌صورت محلی
 spotplayer-downloader/
 ├─ .github/workflows/deploy.yml   # تست + ساخت + انتشار روی GitHub Pages
 ├─ public/
-│  ├─ bookmarklet.txt             # بوکمارکلت تک‌خطی javascript:
+│  ├─ bookmarklet.txt             # فایل Bookmarklet تک‌خطی javascript:
 │  └─ favicon.svg
 ├─ src/
 │  ├─ app.ts, main.ts             # پوسته و اتصال اجزا
@@ -228,7 +246,7 @@ spotplayer-downloader/
 
 ### تست و اعتبارسنجی
 
-- تست‌های واحد **Vitest** شامل remuxer (رفت‌وبرگشت با fixture مصنوعی `mp4s`)، رفت‌وبرگشت XOR، رمزگشایی کد اشتراک، استخراج با `fetch` شبیه‌سازی‌شده، صف متوالی، قالب‌بندی اعداد و ماندگاری پوسته است — در حال حاضر **۱۴۷ تست در ۱۷ فایل**.
+- تست‌های واحد **Vitest** شامل remuxer (رفت‌وبرگشت با fixture مصنوعی `mp4s`)، رفت‌وبرگشت XOR، رمزگشایی کد اشتراک، استخراج با `fetch` شبیه‌سازی‌شده، صف متوالی، قالب‌بندی اعداد و ماندگاری پوسته است — در حال حاضر **۱۵۳ تست در ۱۸ فایل**.
 - هیچ تست خودکار مرورگر/E2E وجود ندارد؛ اعتبارسنجی شامل تست‌های واحد و چک‌لیست دستی بالاست.
 - `pnpm build` نوع‌ها را بررسی و یک `dist/` استاتیک تولید می‌کند.
 

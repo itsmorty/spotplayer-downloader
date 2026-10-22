@@ -4,9 +4,18 @@ import { fa } from '../../i18n/fa'
 import { notify } from '../../ui/toast'
 
 vi.mock('../../ui/toast', () => ({ notify: vi.fn() }))
+vi.mock('../bookmarklet-guide', () => ({ openBookmarkletGuide: vi.fn() }))
 
 const flush = async (): Promise<void> => {
   for (let i = 0; i < 4; i++) await Promise.resolve()
+}
+
+function findButton(section: HTMLElement, label: string): HTMLButtonElement {
+  const button = [...section.querySelectorAll('button')].find((candidate) =>
+    candidate.textContent?.includes(label),
+  )
+  if (!button) throw new Error(`missing button: ${label}`)
+  return button
 }
 
 const BOOKMARKLET = 'javascript:alert(1)'
@@ -92,8 +101,7 @@ describe('createBookmarkletSection', () => {
     const { createBookmarkletSection } = await import('../bookmarklet')
 
     const section = createBookmarkletSection()
-    const button = section.querySelector('button')
-    if (!button) throw new Error('missing copy button')
+    const button = findButton(section, fa.help.copyBookmarklet)
 
     expect(button.disabled).toBe(true)
     await vi.waitFor(() => expect(button.disabled).toBe(false))
@@ -112,8 +120,8 @@ describe('createBookmarkletSection', () => {
     await flush()
 
     expect(section.textContent).toContain(fa.help.bookmarkletLoadFailed)
-    const button = section.querySelector('button')
-    expect(button?.disabled).toBe(true)
+    const button = findButton(section, fa.help.copyBookmarklet)
+    expect(button.disabled).toBe(true)
   })
 
   it('reports a copy failure with an error toast', async () => {
@@ -128,10 +136,22 @@ describe('createBookmarkletSection', () => {
     const { createBookmarkletSection } = await import('../bookmarklet')
 
     const section = createBookmarkletSection()
-    const button = section.querySelector('button')
-    if (!button) throw new Error('missing copy button')
+    const button = findButton(section, fa.help.copyBookmarklet)
     await vi.waitFor(() => expect(button.disabled).toBe(false))
     button.click()
     await vi.waitFor(() => expect(notify).toHaveBeenCalledWith(fa.toast.copyFailed, 'error'))
+  })
+
+  it('opens the setup guide from a labelled trigger', async () => {
+    const { createBookmarkletSection } = await import('../bookmarklet')
+    const { openBookmarkletGuide } = await import('../bookmarklet-guide')
+
+    const section = createBookmarkletSection()
+    const trigger = findButton(section, fa.help.bookmarkletGuide)
+    vi.mocked(openBookmarkletGuide).mockClear()
+
+    trigger.click()
+
+    expect(openBookmarkletGuide).toHaveBeenCalledTimes(1)
   })
 })

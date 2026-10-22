@@ -9,10 +9,12 @@
 import { fa } from '../i18n/fa'
 import { el } from '../ui/el'
 import { notify } from '../ui/toast'
+import { openBookmarkletGuide } from './bookmarklet-guide'
 
 const ICONS = {
   copy: '<rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />',
   alert: '<circle cx="12" cy="12" r="9" /><path d="M12 8v5" /><path d="M12 16h.01" />',
+  book: '<path d="M6 3h12v18l-6-4-6 4V3z" />',
 } as const
 
 function svgIcon(paths: string, size = 18): SVGSVGElement {
@@ -94,7 +96,7 @@ export async function copyText(text: string): Promise<boolean> {
 
 let instance = 0
 
-/** Bookmarklet card: title, drag hint and a copy button (disabled until loaded). */
+/** Bookmarklet card: title, hint, copy button and a link to the setup guide. */
 export function createBookmarkletSection(): HTMLElement {
   const uid = ++instance
   const titleId = `bookmarklet-title-${uid}`
@@ -123,6 +125,13 @@ export function createBookmarkletSection(): HTMLElement {
     fa.common.loading,
   )
 
+  const guideButton = el(
+    'button',
+    { type: 'button', class: 'btn btn-outline btn-sm gap-2' },
+    svgIcon(ICONS.book),
+    el('span', {}, fa.help.bookmarkletGuide),
+  )
+
   const section = el(
     'section',
     {
@@ -135,7 +144,7 @@ export function createBookmarkletSection(): HTMLElement {
       el('h4', { id: titleId, class: 'text-sm font-bold' }, fa.help.bookmarkletTitle),
       el('p', { class: 'text-xs leading-5 text-base-content/70' }, fa.help.bookmarkletHint),
     ),
-    el('div', { class: 'flex flex-wrap items-center gap-2' }, button, status),
+    el('div', { class: 'flex flex-wrap items-center gap-2' }, button, guideButton, status),
   )
 
   let text: string | null = null
@@ -175,6 +184,8 @@ export function createBookmarkletSection(): HTMLElement {
         button.removeAttribute('aria-busy')
       })
   })
+
+  guideButton.addEventListener('click', () => openBookmarkletGuide())
 
   return section
 }
