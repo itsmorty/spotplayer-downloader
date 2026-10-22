@@ -1,7 +1,9 @@
 {
   "name": "spotplayer-downloader",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Client-side SpotPlayer share-code to MP4 extractor with a Persian RTL UI.",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",
