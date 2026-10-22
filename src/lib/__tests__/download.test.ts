@@ -123,7 +123,7 @@ describe('saveBlob with File System Access', () => {
     const { create } = stubObjectUrls()
     const clicked = captureClicks()
 
-    await saveBlob(blob, 'lesson.mp4')
+    await expect(saveBlob(blob, 'lesson.mp4')).resolves.toBe(true)
 
     expect(picker).toHaveBeenCalledTimes(1)
     const options = picker.mock.calls[0][0] as {
@@ -149,7 +149,7 @@ describe('saveBlob with File System Access', () => {
     const { create } = stubObjectUrls()
     const clicked = captureClicks()
 
-    await expect(saveBlob(new Blob(['x']), 'a.mp4')).resolves.toBeUndefined()
+    await expect(saveBlob(new Blob(['x']), 'a.mp4')).resolves.toBe(false)
 
     expect(create).not.toHaveBeenCalled()
     expect(clicked).toEqual([])

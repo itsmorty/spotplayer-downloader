@@ -15,7 +15,7 @@
  * (Task 22) can change the internals without touching callers.
  */
 
-import { buildMp4, parseMp4s } from './remux'
+import { buildMp4, parseMp4s, RemuxError, type RemuxErrorCode } from './remux'
 import {
   cdnHosts,
   decryptSegment,
@@ -56,17 +56,26 @@ export class ExtractError extends Error {
   readonly segment?: number
   /** HTTP status for `http` failures. */
   readonly status?: number
+  /** Set for `remux` failures so the UI can distinguish container vs framing. */
+  readonly remuxCode?: RemuxErrorCode
 
   constructor(
     code: ExtractErrorCode,
     message: string,
-    details: { segment?: number; status?: number } = {},
+    details: {
+      segment?: number
+      status?: number
+      remuxCode?: RemuxErrorCode
+      cause?: unknown
+    } = {},
   ) {
     super(message)
     this.name = 'ExtractError'
     this.code = code
     this.segment = details.segment
     this.status = details.status
+    this.remuxCode = details.remuxCode
+    if (details.cause !== undefined) this.cause = details.cause
   }
 }
 
@@ -247,7 +256,10 @@ export async function extractVideo(
   try {
     mp4 = buildMp4(parseMp4s(payload)).mp4
   } catch (error) {
-    throw new ExtractError('remux', `could not remux "${video.id}": ${describe(error)}`)
+    throw new ExtractError('remux', `could not remux "${video.id}": ${describe(error)}`, {
+      remuxCode: error instanceof RemuxError ? error.code : undefined,
+      cause: error,
+    })
   }
 
   emit('remux', 1, 1)

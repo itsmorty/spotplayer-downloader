@@ -65,13 +65,22 @@ async function saveWithPicker(
   picker: ShowSaveFilePicker,
   blob: Blob,
   name: string,
-): Promise<void> {
+): Promise<boolean> {
+  let handle: FileSystemFileHandleLike
+  try {
+    handle = await picker({ suggestedName: name, types: [MP4_TYPE] })
+  } catch (error) {
+    // A user cancel is silent.
+    if (isAbortError(error)) return false
+    throw error
+  }
+
   let writable: WritableStream<Uint8Array> | null = null
   try {
-    const handle = await picker({ suggestedName: name, types: [MP4_TYPE] })
     writable = await handle.createWritable()
     // `pipeTo` closes the destination stream, which commits the file.
     await blob.stream().pipeTo(writable)
+    return true
   } catch (error) {
     if (writable) {
       try {
@@ -103,21 +112,19 @@ function saveWithAnchor(blob: Blob, name: string): void {
 
 /**
  * Saves `blob` as `filename`, preferring the File System Access API.
- * A user cancel is silent; other failures are rethrown.
+ *
+ * Resolves `true` once the file is written or handed to the browser's download
+ * manager, and `false` when the user cancels the picker (silent by design).
+ * Other failures are rethrown.
  */
-export async function saveBlob(blob: Blob, filename: string): Promise<void> {
+export async function saveBlob(blob: Blob, filename: string): Promise<boolean> {
   const name = sanitizeFilename(filename)
   const picker = getSaveFilePicker()
 
   if (picker) {
-    try {
-      await saveWithPicker(picker, blob, name)
-      return
-    } catch (error) {
-      if (isAbortError(error)) return
-      throw error
-    }
+    return saveWithPicker(picker, blob, name)
   }
 
   saveWithAnchor(blob, name)
+  return true
 }

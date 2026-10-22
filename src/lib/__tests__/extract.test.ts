@@ -269,6 +269,11 @@ describe('extractVideo', () => {
     const error = await extractVideo(CODE, video(body.length), { jobs: 1 }).catch((e: unknown) => e)
 
     expect(error).toBeInstanceOf(ExtractError)
-    expect(error).toMatchObject({ name: 'ExtractError', code: 'remux' })
+    expect(error).toMatchObject({
+      name: 'ExtractError',
+      code: 'remux',
+      remuxCode: 'not-mp4s',
+    })
+    expect((error as ExtractError).cause).toBeInstanceOf(Error)
   })
 })

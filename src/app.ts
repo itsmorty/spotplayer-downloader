@@ -5,13 +5,17 @@
  */
 
 import { fa, selectedCount, videosCount } from './i18n/fa'
+import { createProgress } from './features/progress'
+import { createResultPanel } from './features/result-panel'
+import { extractErrorMessage, isAbortFailure } from './features/extract-errors'
 import { createShareCodeInput } from './features/share-code-input'
 import { createVideoList } from './features/video-list'
+import { extractVideo } from './lib/extract'
 import { formatBytes } from './lib/format'
 import type { ShareCode, Video } from './lib/types'
 import { el } from './ui/el'
 import { applyTheme, resolveInitialTheme, toggleTheme, type Theme } from './ui/theme'
-import { mountToastContainer } from './ui/toast'
+import { mountToastContainer, notify } from './ui/toast'
 
 const ICONS = {
   play: '<path d="M8.4 5.6a1 1 0 0 1 1.53-.85l8 6.4a1 1 0 0 1 0 1.7l-8 6.4a1 1 0 0 1-1.53-.85Z" fill="currentColor" stroke="none" />',
@@ -309,6 +313,9 @@ export function startApp(root: HTMLElement): void {
   )
 
   let currentCode: ShareCode | null = null
+  let busy = false
+  let activeRun: { controller: AbortController; id: number } | null = null
+  let runSequence = 0
 
   const courseMount = el('div', {
     id: 'course-mount',
@@ -319,24 +326,31 @@ export function startApp(root: HTMLElement): void {
     class: 'flex flex-col gap-6 scroll-mt-24',
   })
   const actionMount = el('div', { id: 'action-bar-mount' })
+  const progressMount = el('div', { id: 'progress-mount', class: 'scroll-mt-24' })
+  const resultMount = el('div', { id: 'result-mount', class: 'scroll-mt-24' })
   courseMount.style.display = 'none'
   listMount.style.display = 'none'
   actionMount.style.display = 'none'
 
   const summary = createCourseSummary()
   const actionBar = createActionBar()
+  const progress = createProgress()
+  const resultPanel = createResultPanel()
   courseMount.append(summary.element)
   actionMount.append(actionBar.element)
+  progressMount.append(progress.element)
+  resultMount.append(resultPanel.element)
 
   function syncActions(selected: Video[]): void {
     const bytes = selected.reduce((total, video) => total + video.size, 0)
     actionBar.count.textContent =
       selected.length === 0 ? fa.selection.none : selectedCount(selected.length)
     actionBar.size.textContent = `${fa.selection.selectedSize}: ${formatBytes(bytes)}`
-    actionBar.extractOne.disabled = selected.length !== 1
-    actionBar.downloadAll.disabled = selected.length === 0
-    actionBar.hint.textContent =
-      selected.length === 0
+    actionBar.extractOne.disabled = busy || selected.length !== 1
+    actionBar.downloadAll.disabled = busy || selected.length === 0
+    actionBar.hint.textContent = busy
+      ? fa.selection.hintRunning
+      : selected.length === 0
         ? fa.selection.hintNone
         : selected.length === 1
           ? fa.selection.hintOne
@@ -346,8 +360,96 @@ export function startApp(root: HTMLElement): void {
   const videoList = createVideoList({ onSelectionChange: syncActions })
   listMount.append(videoList.element)
 
+  const shareMount = el('div', { id: 'share-code-mount' })
+  const shareInput = createShareCodeInput({ onLoaded: handleLoaded })
+  shareMount.append(shareInput.element)
+
+  function setBusy(next: boolean): void {
+    busy = next
+    videoList.setDisabled(next)
+    shareInput.setBusy(next)
+    actionBar.element.setAttribute('aria-busy', String(next))
+    syncActions(videoList.getSelected())
+  }
+
+  function beginRun(): { controller: AbortController; id: number } | null {
+    if (busy || activeRun) return null
+    const controller = new AbortController()
+    const run = { controller, id: ++runSequence }
+    activeRun = run
+    setBusy(true)
+    return run
+  }
+
+  function isCurrent(run: { id: number }): boolean {
+    return activeRun?.id === run.id
+  }
+
+  function endRun(run: { id: number }): void {
+    if (!isCurrent(run)) return
+    activeRun = null
+    progress.setPhase(null)
+    progress.setCancelEnabled(false)
+    setBusy(false)
+  }
+
+  progress.onCancel(() => {
+    const run = activeRun
+    if (!run || run.controller.signal.aborted) return
+    run.controller.abort()
+    progress.setCancelEnabled(false)
+    progress.setStatus(fa.progress.cancelling)
+  })
+
+  async function extractSelected(video: Video): Promise<void> {
+    if (!currentCode) return
+    const run = beginRun()
+    if (!run) return
+    const code = currentCode
+    const signal = run.controller.signal
+
+    resultPanel.clear()
+    progress.show('single')
+    progress.setCancelEnabled(true)
+    progress.setStatus(fa.progress.starting)
+
+    try {
+      const blob = await extractVideo(code, video, {
+        signal,
+        onProgress: (event) => {
+          if (!isCurrent(run)) return
+          progress.setPhase(event.phase)
+          progress.setItemProgress(event.done, event.total)
+          progress.setStatus(fa.progress.phase[event.phase])
+        },
+      })
+
+      if (!isCurrent(run)) return
+      progress.setItemProgress(1, 1)
+      progress.setStatus(fa.progress.done)
+      progress.showAlert('success', fa.progress.singleSuccess)
+      resultPanel.show(blob, `${video.name}.mp4`, video.time)
+      notify(fa.toast.extractDone, 'success')
+    } catch (error) {
+      if (!isCurrent(run)) return
+      if (isAbortFailure(error)) {
+        progress.setStatus(fa.progress.stopped)
+        progress.showAlert('info', fa.errors.aborted)
+        notify(fa.toast.extractAborted, 'info')
+      } else {
+        progress.setStatus(fa.progress.failed)
+        progress.showAlert('error', extractErrorMessage(error))
+        notify(fa.toast.extractFailed, 'error')
+      }
+    } finally {
+      endRun(run)
+    }
+  }
+
   function handleLoaded(code: ShareCode): void {
     currentCode = code
+    resultPanel.clear()
+    progress.hide()
     const totalSize = code.videos.reduce((total, video) => total + video.size, 0)
 
     summary.name.textContent = code.name.trim() === '' ? fa.course.unnamed : code.name
@@ -370,18 +472,15 @@ export function startApp(root: HTMLElement): void {
   }
 
   actionBar.extractOne.addEventListener('click', () => {
-    if (!currentCode || videoList.getSelected().length !== 1) return
-    // Single-video extraction is wired in the next task.
+    const selected = videoList.getSelected()
+    if (!currentCode || selected.length !== 1 || busy) return
+    void extractSelected(selected[0])
   })
 
   actionBar.downloadAll.addEventListener('click', () => {
-    if (!currentCode || videoList.getSelected().length === 0) return
-    // Playlist extraction is wired in a later task.
+    if (!currentCode || videoList.getSelected().length === 0 || busy) return
+    // Playlist extraction is wired in the next task.
   })
-
-  const shareMount = el('div', { id: 'share-code-mount' })
-  const shareInput = createShareCodeInput({ onLoaded: handleLoaded })
-  shareMount.append(shareInput.element)
 
   const main = el(
     'main',
@@ -395,6 +494,8 @@ export function startApp(root: HTMLElement): void {
     courseMount,
     listMount,
     actionMount,
+    progressMount,
+    resultMount,
   )
 
   const shell = el(
