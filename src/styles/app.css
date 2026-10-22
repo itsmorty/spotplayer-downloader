@@ -22,6 +22,17 @@
   }
 }
 
+/* Keep the secondary action professional; DaisyUI's stock secondary is magenta. */
+[data-theme="light"] {
+  --color-secondary: oklch(0.55 0.11 220);
+  --color-secondary-content: oklch(0.99 0 0);
+}
+
+[data-theme="dark"] {
+  --color-secondary: oklch(0.72 0.1 220);
+  --color-secondary-content: oklch(0.16 0.02 220);
+}
+
 /* Share codes and file names: left-to-right, isolated from the RTL page. */
 @utility code-ltr {
   direction: ltr;

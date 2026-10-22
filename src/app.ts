@@ -4,8 +4,11 @@
  * video list, actions).
  */
 
-import { fa } from './i18n/fa'
+import { fa, selectedCount, videosCount } from './i18n/fa'
 import { createShareCodeInput } from './features/share-code-input'
+import { createVideoList } from './features/video-list'
+import { formatBytes } from './lib/format'
+import type { ShareCode, Video } from './lib/types'
 import { el } from './ui/el'
 import { applyTheme, resolveInitialTheme, toggleTheme, type Theme } from './ui/theme'
 import { mountToastContainer } from './ui/toast'
@@ -15,6 +18,7 @@ const ICONS = {
   sun: '<circle cx="12" cy="12" r="4" /><path d="M12 2v2" /><path d="M12 20v2" /><path d="m4.93 4.93 1.42 1.42" /><path d="m17.66 17.66 1.41 1.41" /><path d="M2 12h2" /><path d="M20 12h2" /><path d="m4.93 19.07 1.42-1.42" /><path d="m17.66 6.34 1.41-1.41" />',
   moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />',
   help: '<circle cx="12" cy="12" r="9" /><path d="M9.6 9.2a2.5 2.5 0 0 1 4.8 1c0 1.7-2.4 2-2.4 3.8" /><path d="M12 17h.01" />',
+  download: '<path d="M12 4v11" /><path d="m7 10 5 5 5-5" /><path d="M5 20h14" />',
 } as const
 
 function svgIcon(paths: string, size = 20): SVGSVGElement {
@@ -146,6 +150,142 @@ function createFooter(): HTMLElement {
   )
 }
 
+interface CourseSummary {
+  element: HTMLElement
+  name: HTMLElement
+  count: HTMLElement
+  size: HTMLElement
+}
+
+function createCourseSummary(): CourseSummary {
+  const name = el('h2', { id: 'course-name', class: 'text-xl font-bold leading-8' })
+  const count = el('p', { class: 'text-sm font-semibold leading-6 tabular-nums' })
+  const size = el('p', { class: 'text-sm font-semibold leading-6 tabular-nums' })
+
+  const stat = (label: string, value: HTMLElement): HTMLElement =>
+    el(
+      'div',
+      { class: 'rounded-lg border border-base-300 bg-base-200/50 px-3 py-2' },
+      el('p', { class: 'text-xs leading-5 text-base-content/50' }, label),
+      value,
+    )
+
+  const element = el(
+    'section',
+    {
+      class: 'card border border-base-300 bg-base-100 shadow-sm',
+      'aria-labelledby': 'course-name',
+    },
+    el(
+      'div',
+      { class: 'card-body gap-4 p-5 sm:p-6' },
+      el(
+        'div',
+        { class: 'flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between' },
+        el(
+          'div',
+          { class: 'flex min-w-0 flex-col gap-1' },
+          el(
+            'p',
+            { class: 'text-xs font-medium leading-5 text-base-content/50' },
+            fa.course.label,
+          ),
+          name,
+        ),
+        el(
+          'div',
+          { class: 'grid w-full grid-cols-2 gap-2 sm:w-auto sm:min-w-64' },
+          stat(fa.course.videosLabel, count),
+          stat(fa.course.sizeLabel, size),
+        ),
+      ),
+    ),
+  )
+
+  return { element, name, count, size }
+}
+
+interface ActionBar {
+  element: HTMLElement
+  extractOne: HTMLButtonElement
+  downloadAll: HTMLButtonElement
+  count: HTMLElement
+  size: HTMLElement
+  hint: HTMLElement
+}
+
+function createActionBar(): ActionBar {
+  const count = el(
+    'span',
+    { class: 'text-sm font-medium leading-6 text-base-content/70' },
+    fa.selection.none,
+  )
+  const size = el(
+    'span',
+    { class: 'text-xs leading-5 text-base-content/50' },
+    `${fa.selection.selectedSize}: ${formatBytes(0)}`,
+  )
+  const hint = el(
+    'p',
+    { class: 'text-xs leading-5 text-base-content/55' },
+    fa.selection.hintNone,
+  )
+
+  const extractOne = el(
+    'button',
+    {
+      id: 'extract-one',
+      type: 'button',
+      class: 'btn btn-primary gap-2',
+      disabled: 'disabled',
+    },
+    svgIcon(ICONS.play, 18),
+    el('span', {}, fa.selection.extractOne),
+  )
+
+  const downloadAll = el(
+    'button',
+    {
+      id: 'download-all',
+      type: 'button',
+      class: 'btn btn-secondary gap-2',
+      disabled: 'disabled',
+    },
+    svgIcon(ICONS.download, 18),
+    el('span', {}, fa.selection.downloadAll),
+  )
+
+  const element = el(
+    'section',
+    {
+      class: 'card border border-base-300 bg-base-100 shadow-sm',
+      'aria-labelledby': 'action-heading',
+    },
+    el(
+      'div',
+      {
+        class:
+          'card-body flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5',
+      },
+      el(
+        'div',
+        { class: 'flex min-w-0 flex-col gap-1' },
+        el(
+          'div',
+          { class: 'flex flex-wrap items-baseline gap-x-3 gap-y-1' },
+          el('h2', { id: 'action-heading', class: 'text-sm font-bold' }, fa.selection.title),
+          count,
+          size,
+        ),
+        hint,
+      ),
+      el('div', { class: 'flex flex-col gap-2 sm:flex-row' }, extractOne, downloadAll),
+    ),
+  )
+
+  return { element, extractOne, downloadAll, count, size, hint }
+}
+
 /**
  * Builds the shell and mounts it into `root`.
  *
@@ -168,18 +308,79 @@ export function startApp(root: HTMLElement): void {
     fa.nav.skipToContent,
   )
 
-  const courseMount = el('div', { id: 'course-mount', class: 'flex flex-col gap-6' })
-  const listMount = el('div', { id: 'video-list-mount', class: 'flex flex-col gap-6' })
+  let currentCode: ShareCode | null = null
+
+  const courseMount = el('div', {
+    id: 'course-mount',
+    class: 'flex flex-col gap-6 scroll-mt-24',
+  })
+  const listMount = el('div', {
+    id: 'video-list-mount',
+    class: 'flex flex-col gap-6 scroll-mt-24',
+  })
   const actionMount = el('div', { id: 'action-bar-mount' })
-  courseMount.hidden = true
-  listMount.hidden = true
-  actionMount.hidden = true
+  courseMount.style.display = 'none'
+  listMount.style.display = 'none'
+  actionMount.style.display = 'none'
+
+  const summary = createCourseSummary()
+  const actionBar = createActionBar()
+  courseMount.append(summary.element)
+  actionMount.append(actionBar.element)
+
+  function syncActions(selected: Video[]): void {
+    const bytes = selected.reduce((total, video) => total + video.size, 0)
+    actionBar.count.textContent =
+      selected.length === 0 ? fa.selection.none : selectedCount(selected.length)
+    actionBar.size.textContent = `${fa.selection.selectedSize}: ${formatBytes(bytes)}`
+    actionBar.extractOne.disabled = selected.length !== 1
+    actionBar.downloadAll.disabled = selected.length === 0
+    actionBar.hint.textContent =
+      selected.length === 0
+        ? fa.selection.hintNone
+        : selected.length === 1
+          ? fa.selection.hintOne
+          : fa.selection.hintMany
+  }
+
+  const videoList = createVideoList({ onSelectionChange: syncActions })
+  listMount.append(videoList.element)
+
+  function handleLoaded(code: ShareCode): void {
+    currentCode = code
+    const totalSize = code.videos.reduce((total, video) => total + video.size, 0)
+
+    summary.name.textContent = code.name.trim() === '' ? fa.course.unnamed : code.name
+    summary.count.textContent = videosCount(code.videos.length)
+    summary.size.textContent = formatBytes(totalSize)
+
+    videoList.setVideos(code.videos)
+    courseMount.style.display = ''
+    listMount.style.display = ''
+    actionMount.style.display = ''
+
+    const reduceMotion =
+      typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+    requestAnimationFrame(() => {
+      courseMount.scrollIntoView({
+        behavior: reduceMotion ? 'auto' : 'smooth',
+        block: 'start',
+      })
+    })
+  }
+
+  actionBar.extractOne.addEventListener('click', () => {
+    if (!currentCode || videoList.getSelected().length !== 1) return
+    // Single-video extraction is wired in the next task.
+  })
+
+  actionBar.downloadAll.addEventListener('click', () => {
+    if (!currentCode || videoList.getSelected().length === 0) return
+    // Playlist extraction is wired in a later task.
+  })
 
   const shareMount = el('div', { id: 'share-code-mount' })
-  const shareInput = createShareCodeInput({
-    // Wired to the course summary and video list in the next task.
-    onLoaded: () => {},
-  })
+  const shareInput = createShareCodeInput({ onLoaded: handleLoaded })
   shareMount.append(shareInput.element)
 
   const main = el(
