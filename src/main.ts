@@ -1,3 +1,7 @@
+import '@fontsource/vazirmatn/400.css'
+import '@fontsource/vazirmatn/500.css'
+import '@fontsource/vazirmatn/700.css'
+import '@fontsource/vazirmatn/900.css'
 import './styles/app.css'
 import heroImg from './assets/hero.png'
 import typescriptLogo from './assets/typescript.svg'

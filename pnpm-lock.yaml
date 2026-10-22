@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      '@fontsource/vazirmatn':
+        specifier: ^5.3.0
+        version: 5.3.0
     devDependencies:
       '@tailwindcss/vite':
         specifier: ^4.3.3
@@ -25,6 +29,9 @@ importers:
         version: 8.3.5(jiti@2.7.0)
 
 packages:
+
+  '@fontsource/vazirmatn@5.3.0':
+    resolution: {integrity: sha512-XC/2yN2r5gwhFT3klSuWaqncODX2DOfRYfNmbyzgtWYxHxMC+tcoaX+tgggrm6hSkEgpR1TuSDEf1PiI91G7qg==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -506,6 +513,8 @@ packages:
         optional: true
 
 snapshots:
+
+  '@fontsource/vazirmatn@5.3.0': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:

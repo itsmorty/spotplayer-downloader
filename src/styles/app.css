@@ -5,3 +5,9 @@
 @theme {
   --font-sans: "Vazirmatn", ui-sans-serif, system-ui, sans-serif;
 }
+
+@layer base {
+  body {
+    @apply bg-base-100 font-sans text-base-content antialiased;
+  }
+}
