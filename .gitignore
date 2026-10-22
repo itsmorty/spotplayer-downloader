@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.local
+.DS_Store
+*.mp4
+*.mp4s
+creds*.json
