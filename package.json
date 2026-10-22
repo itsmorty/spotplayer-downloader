@@ -4,6 +4,11 @@
   "version": "1.0.0",
   "description": "Client-side SpotPlayer share-code to MP4 extractor with a Persian RTL UI.",
   "license": "MIT",
+  "homepage": "https://itsmorty.github.io/sp-static-extractor/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/itsmorty/sp-static-extractor.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",

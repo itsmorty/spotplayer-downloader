@@ -1,6 +1,10 @@
 # SpotPlayer Static Extractor
 
+[![Deploy to GitHub Pages](https://github.com/itsmorty/sp-static-extractor/actions/workflows/deploy.yml/badge.svg)](https://github.com/itsmorty/sp-static-extractor/actions/workflows/deploy.yml)
+
 A 100 % client-side web app that turns a SpotPlayer share code into downloadable MP4 files — for one video or a whole playlist.
+
+**Live app:** <https://itsmorty.github.io/sp-static-extractor/>
 
 ---
 
@@ -119,6 +123,8 @@ MIT — see [LICENSE](./LICENSE).
 ---
 
 ## فارسی
+
+**نسخهٔ آنلاین:** <https://itsmorty.github.io/sp-static-extractor/>
 
 ### این ابزار چه می‌کند؟
 
