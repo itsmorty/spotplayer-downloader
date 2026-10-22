@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildMp4, parseMp4s, RemuxError } from '../remux'
+import { buildMp4, buildMp4Parts, parseMp4s, parseMp4sChunks, RemuxError } from '../remux'
 import type { RemuxErrorCode } from '../remux'
 import { DEFAULT_AVCC, findBytes, makeMp4s, mp4sIndexOffset, splitAvcc } from './fixtures'
 
@@ -243,5 +243,166 @@ describe('parseMp4s guards', () => {
     const bad = makeMp4s()
     new DataView(bad.buffer).setUint32(10, 13) // header says 13 audio frames, index has 12
     expect(errorCode(() => parseMp4s(bad))).toBe('count-mismatch')
+  })
+})
+
+function concat(parts: readonly Uint8Array[]): Uint8Array {
+  let total = 0
+  for (const part of parts) total += part.length
+  const out = new Uint8Array(total)
+  let offset = 0
+  for (const part of parts) {
+    out.set(part, offset)
+    offset += part.length
+  }
+  return out
+}
+
+/** Splits `u8` after every offset (out-of-range/duplicate offsets are skipped). */
+function splitAt(u8: Uint8Array, offsets: readonly number[]): Uint8Array[] {
+  const chunks: Uint8Array[] = []
+  let start = 0
+  for (const end of offsets) {
+    if (end <= start || end >= u8.length) continue
+    chunks.push(u8.subarray(start, end))
+    start = end
+  }
+  chunks.push(u8.subarray(start))
+  return chunks
+}
+
+describe('parseMp4sChunks', () => {
+  const container = makeMp4s()
+  const reference = parseMp4s(container)
+  const dataSize = [...reference.video, ...reference.audio].reduce((n, s) => n + s.length + 1, 0)
+  const dataOff = container.length - dataSize
+
+  const splits: Array<[string, Uint8Array[]]> = [
+    ['after 1, 3, 17 and 34 bytes', splitAt(container, [1, 3, 17, 34])],
+    ['mid-index', splitAt(container, [mp4sIndexOffset() + 3])],
+    ['mid-sample', splitAt(container, [container.length - 10])],
+    [
+      'every 7 bytes',
+      splitAt(container, Array.from({ length: Math.floor(container.length / 7) }, (_, i) => (i + 1) * 7)),
+    ],
+  ]
+
+  for (const [label, chunks] of splits) {
+    it(`matches parseMp4s when split ${label}`, () => {
+      expect(chunks.length).toBeGreaterThan(1)
+      expect(parseMp4sChunks(chunks)).toEqual(reference)
+    })
+  }
+
+  it('ignores empty chunks and accepts an explicit total length', () => {
+    const chunks = splitAt(container, [1, 3, 17, 34, mp4sIndexOffset() + 3])
+    chunks.push(new Uint8Array(0))
+    chunks.unshift(new Uint8Array(0))
+    expect(parseMp4sChunks(chunks)).toEqual(reference)
+    expect(parseMp4sChunks(chunks, container.length)).toEqual(reference)
+  })
+
+  it('rejects a total length that disagrees with the chunks', () => {
+    expect(errorCode(() => parseMp4sChunks([container], container.length + 1))).toBe('bad-framing')
+    expect(errorCode(() => parseMp4sChunks([container], container.length - 1))).toBe('bad-framing')
+  })
+
+  it('keeps samples inside one chunk as zero-copy views', () => {
+    const cut = dataOff + 1 + reference.video[0].length + 1
+    const chunks = [container.slice(0, cut), container.slice(cut)]
+    const parsed = parseMp4sChunks(chunks)
+
+    expect(parsed).toEqual(reference)
+    expect(parsed.video[0].buffer).toBe(chunks[0].buffer)
+    expect(parsed.video[1].buffer).toBe(chunks[1].buffer)
+    expect(parsed.audio[0].buffer).toBe(chunks[1].buffer)
+  })
+
+  it('copies only samples that straddle a chunk boundary', () => {
+    // 5 bytes into audio packet 0, so that one sample spans the cut.
+    const cut = dataOff + 1 + reference.video[0].length + 1 + 5
+    const chunks = [container.slice(0, cut), container.slice(cut)]
+    const parsed = parseMp4sChunks(chunks)
+
+    expect(parsed).toEqual(reference)
+    expect(parsed.audio[0].buffer).not.toBe(chunks[0].buffer)
+    expect(parsed.audio[0].buffer).not.toBe(chunks[1].buffer)
+    expect(parsed.video[1].buffer).toBe(chunks[1].buffer)
+  })
+
+  it('keeps the same error codes as parseMp4s', () => {
+    const truncated = container.subarray(0, container.length - 3)
+    expect(errorCode(() => parseMp4sChunks(splitAt(truncated, [17])))).toBe('bad-framing')
+
+    const badIndex = makeMp4s()
+    badIndex[mp4sIndexOffset()] = (5 << 4) | 2
+    expect(errorCode(() => parseMp4sChunks(splitAt(badIndex, [17])))).toBe('bad-index')
+
+    const badCount = makeMp4s()
+    new DataView(badCount.buffer).setUint32(10, 13)
+    expect(errorCode(() => parseMp4sChunks(splitAt(badCount, [17])))).toBe('count-mismatch')
+
+    const badMagic = makeMp4s()
+    badMagic[0] = 0x00
+    expect(errorCode(() => parseMp4sChunks(splitAt(badMagic, [17])))).toBe('not-mp4s')
+  })
+})
+
+describe('buildMp4Parts', () => {
+  const parsed = parseMp4s(makeMp4s())
+  const parts = buildMp4Parts(parsed)
+  const built = buildMp4(parsed)
+  const videoBytes = parsed.video.reduce((n, s) => n + s.length, 0)
+  const audioBytes = parsed.audio.reduce((n, s) => n + s.length, 0)
+
+  it('concatenates byte-for-byte to buildMp4', () => {
+    expect(parts.size).toBe(built.mp4.length)
+    expect(concat(parts.parts)).toEqual(built.mp4)
+  })
+
+  it('emits the validated ftyp and an 8-byte mdat header', () => {
+    const ftyp = parts.parts[0]
+    expect(String.fromCharCode(...ftyp.subarray(4, 8))).toBe('ftyp')
+    expect(ftyp).toEqual(built.mp4.subarray(0, ftyp.length))
+
+    const header = parts.parts[1]
+    expect(header).toHaveLength(8)
+    expect(String.fromCharCode(...header.subarray(4, 8))).toBe('mdat')
+    expect(view(header).getUint32(0)).toBe(8 + videoBytes + audioBytes)
+  })
+
+  it('orders video samples before audio samples without copying them', () => {
+    const videoParts = parts.parts.slice(2, 2 + parsed.video.length)
+    const audioParts = parts.parts.slice(2 + parsed.video.length, parts.parts.length - 1)
+
+    expect(videoParts).toEqual(parsed.video)
+    expect(audioParts).toEqual(parsed.audio)
+    for (let i = 0; i < parsed.video.length; i++) expect(videoParts[i]).toBe(parsed.video[i])
+    for (let i = 0; i < parsed.audio.length; i++) expect(audioParts[i]).toBe(parsed.audio[i])
+
+    expect(parts.parts).toHaveLength(2 + parsed.video.length + parsed.audio.length + 1)
+    const moov = parts.parts[parts.parts.length - 1]
+    expect(String.fromCharCode(...moov.subarray(4, 8))).toBe('moov')
+    expect(concat([moov])).toEqual(built.mp4.subarray(built.mp4.length - moov.length))
+  })
+
+  it('reports the offsets and size of the concatenated file', () => {
+    expect(parts.videoOff).toBe(built.videoOff)
+    expect(parts.audioOff).toBe(built.audioOff)
+    expect(parts.videoOff).toBe(parts.parts[0].length + 8)
+    expect(parts.audioOff).toBe(parts.videoOff + videoBytes)
+    expect(parts.size).toBe(parts.parts.reduce((n, p) => n + p.length, 0))
+    expect(parts.size).toBe(parts.parts[0].length + 8 + videoBytes + audioBytes + parts.parts[parts.parts.length - 1].length)
+  })
+
+  it('rejects an mdat larger than a 32-bit box', () => {
+    const huge = {
+      ...parsed,
+      video: [{ length: 0x1_0000_0000 } as unknown as Uint8Array],
+      audio: [],
+      videoFrameCount: 1,
+      audioFrameCount: 0,
+    }
+    expect(errorCode(() => buildMp4Parts(huge))).toBe('too-large')
   })
 })

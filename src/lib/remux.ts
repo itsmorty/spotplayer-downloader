@@ -20,7 +20,7 @@
 
 import type { ParsedMp4s } from './types'
 
-export type RemuxErrorCode = 'not-mp4s' | 'bad-index' | 'bad-framing' | 'count-mismatch'
+export type RemuxErrorCode = 'not-mp4s' | 'bad-index' | 'bad-framing' | 'count-mismatch' | 'too-large'
 
 /** Raised when a decrypted payload is not a well-formed `mp4s` container. */
 export class RemuxError extends Error {
@@ -38,6 +38,24 @@ export interface BuiltMp4 {
   /** Byte offset of the first video sample inside `mp4` (the mdat payload). */
   videoOff: number
   /** Byte offset of the first audio sample inside `mp4`. */
+  audioOff: number
+}
+
+/**
+ * An MP4 split into Blob-ready pieces instead of one contiguous buffer.
+ *
+ * Order is `ftyp`, the 8-byte `mdat` header, the video samples, the audio
+ * samples, then `moov` (written last because it records the sample offsets).
+ * Samples are the exact `Uint8Array`s from {@link ParsedMp4s} — never copies —
+ * so `new Blob(parts)` is the only full-size allocation.
+ */
+export interface BuiltMp4Parts {
+  parts: Uint8Array[]
+  /** Exact byte length of the concatenated parts. */
+  size: number
+  /** Byte offset of the first video sample inside the concatenated file. */
+  videoOff: number
+  /** Byte offset of the first audio sample inside the concatenated file. */
   audioOff: number
 }
 
@@ -86,33 +104,139 @@ interface IndexEntry {
 }
 
 /**
- * Parses a decrypted `mp4s` container into header metadata and per-track samples
- * (the flags byte is stripped). Throws a {@link RemuxError} on malformed input.
+ * A random-access reader over a list of chunks with cumulative offsets.
+ *
+ * `slice` returns a zero-copy `subarray` when the range lives inside a single
+ * chunk; only samples that straddle a chunk boundary are copied. `byteAt` keeps
+ * the last chunk cached, so the sequential index walk stays O(n).
  */
-export function parseMp4s(u8: Uint8Array): ParsedMp4s {
-  if (u8.length < HEADER_MIN) {
-    throw new RemuxError('not-mp4s', `container is ${u8.length} bytes; need at least ${HEADER_MIN}`)
+interface ChunkReader {
+  readonly length: number
+  byteAt(pos: number): number
+  u16At(pos: number): number
+  u32At(pos: number): number
+  slice(pos: number, len: number): Uint8Array
+}
+
+function createChunkReader(chunks: readonly Uint8Array[], length: number): ChunkReader {
+  const starts: number[] = []
+  const data: Uint8Array[] = []
+  let offset = 0
+  for (const chunk of chunks) {
+    if (chunk.length === 0) continue // empty chunks carry no bytes
+    starts.push(offset)
+    data.push(chunk)
+    offset += chunk.length
   }
-  if (String.fromCharCode(u8[0], u8[1], u8[2], u8[3]) !== MAGIC) {
+
+  const chunkAt = (pos: number): number => {
+    if (pos < 0 || pos >= length) {
+      throw new RemuxError('bad-framing', `read at ${pos} is outside the ${length}-byte container`)
+    }
+    let low = 0
+    let high = starts.length - 1
+    while (low < high) {
+      const mid = (low + high + 1) >> 1
+      if (starts[mid] <= pos) low = mid
+      else high = mid - 1
+    }
+    return low
+  }
+
+  let cached = 0
+  const byteAt = (pos: number): number => {
+    const start = starts[cached]
+    if (start !== undefined && pos >= start && pos < start + data[cached].length) {
+      return data[cached][pos - start]
+    }
+    cached = chunkAt(pos)
+    return data[cached][pos - starts[cached]]
+  }
+
+  const slice = (pos: number, len: number): Uint8Array => {
+    if (len < 0 || pos < 0 || pos + len > length) {
+      throw new RemuxError(
+        'bad-framing',
+        `slice ${pos}..${pos + len} is outside the ${length}-byte container`,
+      )
+    }
+    if (len === 0) return new Uint8Array(0)
+
+    const first = chunkAt(pos)
+    const last = chunkAt(pos + len - 1)
+    if (first === last) {
+      const local = pos - starts[first]
+      return data[first].subarray(local, local + len)
+    }
+
+    // Boundary-straddling samples are the only ones that pay for a copy.
+    const out = new Uint8Array(len)
+    let written = 0
+    let cursor = pos
+    for (let i = first; i <= last; i++) {
+      const local = cursor - starts[i]
+      const take = Math.min(data[i].length - local, len - written)
+      out.set(data[i].subarray(local, local + take), written)
+      written += take
+      cursor += take
+    }
+    return out
+  }
+
+  return {
+    length,
+    byteAt,
+    u16At: (pos) => (byteAt(pos) << 8) | byteAt(pos + 1),
+    u32At: (pos) =>
+      byteAt(pos) * 0x1000000 + (byteAt(pos + 1) << 16) + (byteAt(pos + 2) << 8) + byteAt(pos + 3),
+    slice,
+  }
+}
+
+/**
+ * Parses a decrypted `mp4s` container supplied as a list of chunks (for example
+ * one decrypted CDN segment per chunk). The bytes are read through a
+ * {@link ChunkReader}, so no contiguous payload is ever allocated; samples that
+ * fit inside one chunk are returned as views into it.
+ *
+ * `totalLength` is the logical container size; when omitted it is the sum of the
+ * chunk lengths. Throws a {@link RemuxError} on malformed input.
+ */
+export function parseMp4sChunks(chunks: readonly Uint8Array[], totalLength?: number): ParsedMp4s {
+  let sum = 0
+  for (const chunk of chunks) sum += chunk.length
+  if (totalLength !== undefined && totalLength !== sum) {
+    throw new RemuxError(
+      'bad-framing',
+      `declared length ${totalLength} does not match the ${sum} bytes in the chunks`,
+    )
+  }
+  const length = totalLength ?? sum
+  if (length < HEADER_MIN) {
+    throw new RemuxError('not-mp4s', `container is ${length} bytes; need at least ${HEADER_MIN}`)
+  }
+
+  const reader = createChunkReader(chunks, length)
+  if (String.fromCharCode(reader.byteAt(0), reader.byteAt(1), reader.byteAt(2), reader.byteAt(3)) !== MAGIC) {
     throw new RemuxError('not-mp4s', 'missing "mp4s" magic at offset 0')
   }
 
-  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength)
-  const durationSec = dv.getUint16(8)
-  const audioFrameCount = dv.getUint32(10)
-  const ascVal = dv.getUint16(18)
-  const asc = u8.slice(18, 20)
-  const sampleRate = dv.getUint16(25)
-  const videoFrameCount = dv.getUint32(27)
-  const avcCSize = dv.getUint32(31)
+  const durationSec = reader.u16At(8)
+  const audioFrameCount = reader.u32At(10)
+  const ascVal = reader.u16At(18)
+  // The config records are tiny; copy them so the result outlives the chunks.
+  const asc = reader.slice(18, 2).slice()
+  const sampleRate = reader.u16At(25)
+  const videoFrameCount = reader.u32At(27)
+  const avcCSize = reader.u32At(31)
 
   const whOff = 35 + avcCSize
-  if (avcCSize < 1 || whOff + 4 > u8.length) {
-    throw new RemuxError('not-mp4s', `avcC size ${avcCSize} does not fit in ${u8.length} bytes`)
+  if (avcCSize < 1 || whOff + 4 > length) {
+    throw new RemuxError('not-mp4s', `avcC size ${avcCSize} does not fit in ${length} bytes`)
   }
-  const avcC = u8.slice(35, whOff)
-  const width = dv.getUint16(whOff)
-  const height = dv.getUint16(whOff + 2)
+  const avcC = reader.slice(35, avcCSize).slice()
+  const width = reader.u16At(whOff)
+  const height = reader.u16At(whOff + 2)
   if (width === 0 || height === 0 || sampleRate === 0) {
     throw new RemuxError(
       'not-mp4s',
@@ -128,8 +252,8 @@ export function parseMp4s(u8: Uint8Array): ParsedMp4s {
   let offset = whOff + 4
   let dataSize = 0
 
-  while (offset < u8.length) {
-    const remaining = u8.length - offset
+  while (offset < length) {
+    const remaining = length - offset
     if (remaining === dataSize) break // the index ends where the data region starts
     if (remaining < dataSize) {
       throw new RemuxError('bad-framing', `packet index overruns the file at offset ${offset}`)
@@ -141,7 +265,7 @@ export function parseMp4s(u8: Uint8Array): ParsedMp4s {
       )
     }
 
-    const entry = u8[offset]
+    const entry = reader.byteAt(offset)
     const sizeLen = entry >> 4
     const type = entry & 0x0f
     if (sizeLen < 1 || sizeLen > 4) {
@@ -150,12 +274,12 @@ export function parseMp4s(u8: Uint8Array): ParsedMp4s {
     if (type > 2) {
       throw new RemuxError('bad-index', `unknown packet type ${type} at offset ${offset}`)
     }
-    if (offset + 1 + sizeLen > u8.length) {
+    if (offset + 1 + sizeLen > length) {
       throw new RemuxError('bad-index', `truncated index entry at offset ${offset}`)
     }
 
     let size = 0
-    for (let k = 0; k < sizeLen; k++) size = size * 256 + u8[offset + 1 + k]
+    for (let k = 0; k < sizeLen; k++) size = size * 256 + reader.byteAt(offset + 1 + k)
     if (size < 1) {
       throw new RemuxError('bad-framing', `packet ${index.length} has no flags byte (size 0)`)
     }
@@ -166,10 +290,10 @@ export function parseMp4s(u8: Uint8Array): ParsedMp4s {
   }
 
   const dataOff = offset
-  if (u8.length - dataOff !== dataSize) {
+  if (length - dataOff !== dataSize) {
     throw new RemuxError(
       'bad-framing',
-      `packet index tiles ${dataSize} bytes but the data region is ${u8.length - dataOff}`,
+      `packet index tiles ${dataSize} bytes but the data region is ${length - dataOff}`,
     )
   }
 
@@ -190,17 +314,17 @@ export function parseMp4s(u8: Uint8Array): ParsedMp4s {
   const audio: Uint8Array[] = []
   let pos = dataOff
   for (const entry of index) {
-    if (pos + entry.size > u8.length) {
+    if (pos + entry.size > length) {
       throw new RemuxError('bad-framing', `packet ${video.length + audio.length} is truncated`)
     }
     // Strip the 1-byte flags field.
-    const sample = u8.subarray(pos + 1, pos + entry.size)
+    const sample = reader.slice(pos + 1, entry.size - 1)
     if (entry.type === 0) audio.push(sample)
     else video.push(sample)
     pos += entry.size
   }
-  if (pos !== u8.length) {
-    throw new RemuxError('bad-framing', `packets end at ${pos}, file ends at ${u8.length}`)
+  if (pos !== length) {
+    throw new RemuxError('bad-framing', `packets end at ${pos}, file ends at ${length}`)
   }
 
   return {
@@ -219,33 +343,70 @@ export function parseMp4s(u8: Uint8Array): ParsedMp4s {
 }
 
 /**
- * Writes a standard MP4 (`ftyp` + `mdat` + `moov`) from the parsed container.
- * The layout and timing scheme are byte-for-byte the validated spike output.
+ * Parses a decrypted `mp4s` container into header metadata and per-track samples
+ * (the flags byte is stripped). Throws a {@link RemuxError} on malformed input.
  */
-export function buildMp4(parsed: ParsedMp4s): BuiltMp4 {
-  const timescale = parsed.sampleRate
-  const audioTotal = parsed.audioFrameCount * 1024
-  const videoFrameCount = parsed.videoFrameCount
+export function parseMp4s(u8: Uint8Array): ParsedMp4s {
+  return parseMp4sChunks([u8])
+}
 
-  // Exact per-frame durations so the video total equals the audio total.
-  const videoDurations = new Uint32Array(videoFrameCount)
+/** Exact per-frame durations so the video total equals the audio total. */
+function videoFrameDurations(videoFrameCount: number, audioTotal: number): Uint32Array {
+  const durations = new Uint32Array(videoFrameCount)
   let previous = 0
   for (let i = 1; i <= videoFrameCount; i++) {
     const current = Math.round((i * audioTotal) / videoFrameCount)
-    videoDurations[i - 1] = current - previous
+    durations[i - 1] = current - previous
     previous = current
   }
+  return durations
+}
 
-  const videoData = concat(parsed.video)
-  const audioData = concat(parsed.audio)
+/**
+ * Writes a standard MP4 as Blob parts (`ftyp`, the `mdat` header, the samples,
+ * then `moov`) without concatenating the media data.
+ *
+ * `moov` is built last because its `stco` boxes record the absolute sample
+ * offsets, which depend on the lengths of the preceding parts.
+ */
+export function buildMp4Parts(parsed: ParsedMp4s): BuiltMp4Parts {
+  const timescale = parsed.sampleRate
+  const audioTotal = parsed.audioFrameCount * 1024
+  const videoDurations = videoFrameDurations(parsed.videoFrameCount, audioTotal)
+
+  let videoBytes = 0
+  for (const sample of parsed.video) videoBytes += sample.length
+  let audioBytes = 0
+  for (const sample of parsed.audio) audioBytes += sample.length
+
+  const mdatSize = 8 + videoBytes + audioBytes
+  if (mdatSize > 0xffffffff) {
+    throw new RemuxError(
+      'too-large',
+      `mdat would be ${mdatSize} bytes; a 32-bit MP4 box holds at most 4294967295`,
+    )
+  }
+
   const ftyp = box('ftyp', concat([ascii('isom'), u32(0x200), ascii('isomiso2avc1mp41')]))
-  const mdat = box('mdat', concat([videoData, audioData]))
-  const videoOff = ftyp.length + 8
-  const audioOff = videoOff + videoData.length
+  const mdatHeader = concat([u32(mdatSize), ascii('mdat')])
+  const videoOff = ftyp.length + mdatHeader.length
+  const audioOff = videoOff + videoBytes
 
   const moov = buildMoov(parsed, videoDurations, videoOff, audioOff, timescale, audioTotal)
-  const mp4 = concat([ftyp, mdat, moov])
-  return { mp4, videoOff, audioOff }
+  const parts: Uint8Array[] = [ftyp, mdatHeader, ...parsed.video, ...parsed.audio, moov]
+  return { parts, size: ftyp.length + mdatSize + moov.length, videoOff, audioOff }
+}
+
+/**
+ * Writes a standard MP4 (`ftyp` + `mdat` + `moov`) from the parsed container.
+ * The layout and timing scheme are byte-for-byte the validated spike output.
+ *
+ * This concatenates {@link buildMp4Parts}, so it is intended for small files and
+ * tests; the extraction path feeds the parts straight to a `Blob`.
+ */
+export function buildMp4(parsed: ParsedMp4s): BuiltMp4 {
+  const { parts, videoOff, audioOff } = buildMp4Parts(parsed)
+  return { mp4: concat(parts), videoOff, audioOff }
 }
 
 function buildMoov(

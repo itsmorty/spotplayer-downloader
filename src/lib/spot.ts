@@ -54,7 +54,7 @@ export function segmentUrl(opts: SegmentUrlOptions): string {
 }
 
 /**
- * Decrypts one downloaded segment in place-of-copy.
+ * Decrypts one downloaded segment into a new buffer.
  *
  * `fileOffset` is the segment's absolute position in the `.spot` file; the first
  * {@link FILE_HEADER_SIZE} bytes of the file are not encrypted, and the XOR
@@ -62,19 +62,36 @@ export function segmentUrl(opts: SegmentUrlOptions): string {
  * encrypted segment returns the plaintext and vice versa.
  */
 export function decryptSegment(seg: Uint8Array, key127: Uint8Array, fileOffset: number): Uint8Array {
+  assertDecryptArgs(key127, fileOffset)
+  return decryptSegmentInPlace(seg.slice(), key127, fileOffset)
+}
+
+/**
+ * Same transform as {@link decryptSegment}, but mutates and returns `seg`
+ * instead of allocating a copy. Used by the large-file extraction path so a
+ * segment never exists in both encrypted and decrypted form.
+ */
+export function decryptSegmentInPlace(
+  seg: Uint8Array,
+  key127: Uint8Array,
+  fileOffset: number,
+): Uint8Array {
+  assertDecryptArgs(key127, fileOffset)
+
+  const payloadStart = Math.max(0, FILE_HEADER_SIZE - fileOffset)
+  // Bytes before `payloadStart` are the clear-text file header; leave them.
+  for (let i = payloadStart; i < seg.length; i++) {
+    const pos = fileOffset + i - FILE_HEADER_SIZE
+    seg[i] ^= key127[pos % KEY_LENGTH] ^ (pos % 251)
+  }
+  return seg
+}
+
+function assertDecryptArgs(key127: Uint8Array, fileOffset: number): void {
   if (key127.length !== KEY_LENGTH) {
     throw new RangeError(`XOR key must be ${KEY_LENGTH} bytes, got ${key127.length}`)
   }
   if (!Number.isInteger(fileOffset) || fileOffset < 0) {
     throw new RangeError(`invalid file offset: ${fileOffset}`)
   }
-
-  const out = new Uint8Array(seg.length)
-  const payloadStart = Math.max(0, FILE_HEADER_SIZE - fileOffset)
-  out.set(seg.subarray(0, payloadStart), 0)
-  for (let i = payloadStart; i < seg.length; i++) {
-    const pos = fileOffset + i - FILE_HEADER_SIZE
-    out[i] = seg[i] ^ key127[pos % KEY_LENGTH] ^ (pos % 251)
-  }
-  return out
 }

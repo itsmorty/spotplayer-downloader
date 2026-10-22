@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   cdnHosts,
   decryptSegment,
+  decryptSegmentInPlace,
   FILE_HEADER_SIZE,
   KEY_LENGTH,
   segmentUrl,
@@ -146,5 +147,45 @@ describe('decryptSegment', () => {
   it('rejects a key that is not 127 bytes', () => {
     expect(() => decryptSegment(payload(10), new Uint8Array(126), 0)).toThrow(RangeError)
     expect(() => decryptSegment(payload(10), new Uint8Array(128), 0)).toThrow(RangeError)
+  })
+})
+
+describe('decryptSegmentInPlace', () => {
+  it('matches decryptSegment while mutating the input', () => {
+    const plain = join(head('SPOTPLAYER'), payload(2048, 3))
+    const encrypted = crypt(plain, KEY, 0)
+    const expected = decryptSegment(encrypted, KEY, 0)
+
+    const target = encrypted.slice()
+    const returned = decryptSegmentInPlace(target, KEY, 0)
+
+    expect(returned).toBe(target)
+    expect(returned).toEqual(expected)
+    expect(target).toEqual(plain)
+  })
+
+  it('round-trips a later segment and keeps header bytes clear', () => {
+    const data = payload(4096, 9)
+    const encrypted = crypt(data, KEY, SEGMENT_SIZE)
+    expect(decryptSegmentInPlace(encrypted, KEY, SEGMENT_SIZE)).toEqual(data)
+    expect(encrypted).toEqual(data) // same buffer, mutated
+
+    const overlap = join(head('overlap'), payload(100))
+    const encryptedOverlap = crypt(overlap, KEY, 100)
+    const out = decryptSegmentInPlace(encryptedOverlap, KEY, 100)
+    expect(out).toEqual(overlap)
+    const headerEnd = FILE_HEADER_SIZE - 100
+    expect(Array.from(out.subarray(0, headerEnd))).toEqual(
+      Array.from(overlap.subarray(0, headerEnd)),
+    )
+  })
+
+  it('rejects a bad key or offset without touching the segment', () => {
+    const seg = payload(10)
+    const before = seg.slice()
+    expect(() => decryptSegmentInPlace(seg, new Uint8Array(126), 0)).toThrow(RangeError)
+    expect(() => decryptSegmentInPlace(seg, KEY, -1)).toThrow(RangeError)
+    expect(() => decryptSegmentInPlace(seg, KEY, 1.5)).toThrow(RangeError)
+    expect(seg).toEqual(before)
   })
 })

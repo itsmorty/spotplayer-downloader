@@ -12,6 +12,28 @@ import type { Progress } from '../extract'
 import type { ShareCode, Video } from '../types'
 import { makeMp4s } from './fixtures'
 
+/**
+ * Counters for the large-file path assertions. The mock keeps the real
+ * implementations; it only records whether extraction still concatenates via
+ * `buildMp4` (it must not) and parses through `parseMp4sChunks` (it must).
+ */
+const remuxCalls = vi.hoisted(() => ({ buildMp4: 0, parseMp4sChunks: 0 }))
+
+vi.mock('../remux', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../remux')>()
+  return {
+    ...actual,
+    buildMp4: (parsed: Parameters<typeof actual.buildMp4>[0]) => {
+      remuxCalls.buildMp4++
+      return actual.buildMp4(parsed)
+    },
+    parseMp4sChunks: (chunks: Parameters<typeof actual.parseMp4sChunks>[0], total?: number) => {
+      remuxCalls.parseMp4sChunks++
+      return actual.parseMp4sChunks(chunks, total)
+    },
+  }
+})
+
 const CODE: ShareCode = {
   l: 'lic',
   m: 'mac',
@@ -187,6 +209,29 @@ describe('extractVideo', () => {
     expect(download).toEqual([1, 2, 3])
     expect(events.filter((e) => e.phase === 'download').every((e) => e.total === 3)).toBe(true)
     expect(events.filter((e) => e.phase === 'decrypt').map((e) => e.done)).toEqual([1, 2, 3])
+  })
+
+  it('extracts a large multi-segment video through chunks without buildMp4', async () => {
+    // ~9.6 MiB of video payload, i.e. five CDN segments: enough to exercise
+    // zero-copy views and boundary-spanning copies without slowing the suite.
+    const body = makeMp4s({ videoFrames: 6, audioFrames: 12, videoSampleSize: 1_600_000 })
+    const file = makeSpotFile(body)
+    const segments = serveSegments(file)
+    expect(segments.length).toBeGreaterThanOrEqual(5)
+
+    stubCdn(segments)
+    const expected = buildMp4(parseMp4s(body)).mp4
+    remuxCalls.buildMp4 = 0
+    remuxCalls.parseMp4sChunks = 0
+
+    const blob = await extractVideo(CODE, video(body.length), { jobs: 3 })
+
+    expect(blob.type).toBe('video/mp4')
+    expect(blob.size).toBe(expected.length)
+    expectSameBytes(new Uint8Array(await blob.arrayBuffer()), expected)
+    // The large-file path must feed Blob parts, not a concatenated MP4.
+    expect(remuxCalls.buildMp4).toBe(0)
+    expect(remuxCalls.parseMp4sChunks).toBe(1)
   })
 
   it('surfaces CDN failures as an http ExtractError with segment details', async () => {

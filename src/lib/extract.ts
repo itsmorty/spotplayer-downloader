@@ -6,19 +6,33 @@
  *   1. download — split the logical `.spot` file (`video.size + 184` bytes) into
  *      2 MiB CDN ranges and fetch them through a small worker pool;
  *   2. decrypt — the XOR key is the plaintext 127 bytes at header offset 25 of
- *      segment 0; decrypt every segment, drop segment 0's 184-byte header and
- *      concatenate into a payload of exactly `video.size` bytes;
- *   3. remux — parse the `mp4s` container and rebuild a standard MP4.
+ *      segment 0; decrypt every segment **in place**, drop segment 0's 184-byte
+ *      header and keep the rest as one chunk per segment;
+ *   3. remux — parse the chunk list, then build the MP4 as Blob parts.
+ *
+ * Memory strategy for large videos (up to ~1.3 GB): no step ever allocates a
+ * second full-size buffer. Segments are decrypted in place, the parser returns
+ * zero-copy sample views into those segments (only samples straddling a segment
+ * boundary are copied), and `mdat` is never concatenated: the MP4 is assembled
+ * as `ftyp` + an 8-byte `mdat` header + sample parts + `moov`, with `moov`'s
+ * offsets computed from part lengths. The peak is therefore roughly the
+ * decrypted segments plus the Blob's own copy, instead of five or six copies.
  *
  * Nothing here touches the UI, the network beyond the CDN, or global state. The
  * public `extractVideo` signature is intentionally stable so the large-file path
- * (Task 22) can change the internals without touching callers.
+ * can change the internals without touching callers.
  */
 
-import { buildMp4, parseMp4s, RemuxError, type RemuxErrorCode } from './remux'
+import {
+  buildMp4Parts,
+  parseMp4sChunks,
+  RemuxError,
+  type BuiltMp4Parts,
+  type RemuxErrorCode,
+} from './remux'
 import {
   cdnHosts,
-  decryptSegment,
+  decryptSegmentInPlace,
   FILE_HEADER_SIZE,
   KEY_LENGTH,
   KEY_OFFSET,
@@ -219,49 +233,62 @@ export async function extractVideo(
     throw new ExtractError('invalid', `XOR key is ${key127.length} bytes, expected ${KEY_LENGTH}`)
   }
 
-  const payload = new Uint8Array(video.size)
-  let written = 0
+  // One chunk per decrypted segment. Each segment is mutated in place, so there
+  // is never an encrypted and a decrypted copy of the same bytes at once.
+  const chunks: Uint8Array[] = []
+  let chunkBytes = 0
   for (let index = 0; index < segCount; index++) {
     if (signal?.aborted) {
       segments.length = 0
+      chunks.length = 0
       throw new ExtractError('aborted', abortedMessage())
     }
 
-    const encrypted = segments[index]
+    const segment = segments[index]
     segments[index] = undefined // release as we go
-    if (!encrypted) {
+    if (!segment) {
       throw new ExtractError('empty', `segment ${index} is missing`, { segment: index })
     }
 
-    const decrypted = decryptSegment(encrypted, key127, index * SEGMENT_SIZE)
-    const skip = index === 0 ? FILE_HEADER_SIZE : 0
-    const available = decrypted.length - skip
-    const take = Math.min(available, video.size - written)
-    if (take > 0) {
-      payload.set(decrypted.subarray(skip, skip + take), written)
-      written += take
-    }
+    decryptSegmentInPlace(segment, key127, index * SEGMENT_SIZE)
+    // Segment 0 carries the 184-byte `.spot` header, which is not part of the
+    // `mp4s` container.
+    const chunk = index === 0 ? segment.subarray(FILE_HEADER_SIZE) : segment
+    chunks.push(chunk)
+    chunkBytes += chunk.length
 
     emit('decrypt', index + 1, segCount)
   }
 
-  if (written !== video.size) {
+  if (chunkBytes !== video.size) {
+    chunks.length = 0
     throw new ExtractError(
       'size-mismatch',
-      `decrypted payload is ${written} bytes, expected ${video.size}`,
+      `decrypted payload is ${chunkBytes} bytes, expected ${video.size}`,
     )
   }
 
-  let mp4: Uint8Array
+  const parts = remuxChunks(chunks, video.id)
+
+  emit('remux', 1, 1)
+  // The Blob constructor copies the parts into its own storage; after this the
+  // segment buffers are no longer needed, so drop every local reference.
+  // The cast is only for TS 6, whose `BlobPart` demands `ArrayBufferView<ArrayBuffer>`
+  // while samples are views over plain `Uint8Array` buffers.
+  const blob = new Blob(parts.parts as Uint8Array<ArrayBuffer>[], { type: 'video/mp4' })
+  chunks.length = 0
+  parts.parts.length = 0
+  return blob
+}
+
+/** Parses and builds the MP4 from the chunk list, mapping failures for the UI. */
+function remuxChunks(chunks: readonly Uint8Array[], videoId: string): BuiltMp4Parts {
   try {
-    mp4 = buildMp4(parseMp4s(payload)).mp4
+    return buildMp4Parts(parseMp4sChunks(chunks))
   } catch (error) {
-    throw new ExtractError('remux', `could not remux "${video.id}": ${describe(error)}`, {
+    throw new ExtractError('remux', `could not remux "${videoId}": ${describe(error)}`, {
       remuxCode: error instanceof RemuxError ? error.code : undefined,
       cause: error,
     })
   }
-
-  emit('remux', 1, 1)
-  return new Blob([mp4 as Uint8Array<ArrayBuffer>], { type: 'video/mp4' })
 }
