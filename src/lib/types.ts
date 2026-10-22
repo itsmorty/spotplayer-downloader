@@ -6,7 +6,7 @@ export interface Video {
   size: number
   /** CDN host bitmask (`cdnHosts`). */
   cdn: number
-  /** Duration in seconds. */
+  /** Duration in seconds, converted from the share code's milliseconds. */
   time: number
 }
 

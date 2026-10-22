@@ -2,14 +2,24 @@ import { describe, expect, it } from 'vitest'
 import { decodeShareCode, ShareCodeError } from '../share'
 import type { ShareCodeErrorCode } from '../share'
 
+/** Raw share code as SpotPlayer emits it: `time` is in milliseconds. */
 const CODE = {
   l: 'aa11',
   m: 'bb22',
   course: 'cc33',
   name: 'دوره آزمایشی',
   videos: [
-    { id: 'v1', name: 'ویدیو ۱', size: 123456, cdn: 7, time: 429.418667 },
-    { id: 'v2', name: 'ویدیو ۲', size: 987654, cdn: 0, time: 10 },
+    { id: 'v1', name: 'ویدیو ۱', size: 123456, cdn: 7, time: 429417 },
+    { id: 'v2', name: 'ویدیو ۲', size: 987654, cdn: 0, time: 10000 },
+  ],
+}
+
+/** The same code after decoding: `time` has been converted to seconds. */
+const DECODED = {
+  ...CODE,
+  videos: [
+    { ...CODE.videos[0], time: 429.417 },
+    { ...CODE.videos[1], time: 10 },
   ],
 }
 
@@ -42,25 +52,25 @@ async function codeOf(promise: Promise<unknown>): Promise<ShareCodeErrorCode | '
 describe('decodeShareCode', () => {
   it('round-trips a gzipped SP1 code', async () => {
     const decoded = await decodeShareCode(await sp1(CODE))
-    expect(decoded).toEqual(CODE)
+    expect(decoded).toEqual(DECODED)
   })
 
   it('trims surrounding whitespace and newlines around an SP1 code', async () => {
     const code = await sp1(CODE)
     const wrapped = `\n\n  ${code}  \n`
-    expect(await decodeShareCode(wrapped)).toEqual(CODE)
+    expect(await decodeShareCode(wrapped)).toEqual(DECODED)
   })
 
   it('tolerates line breaks inside the base64 payload', async () => {
     const code = await sp1(CODE)
     const payload = code.slice('SP1:'.length)
     const broken = `SP1:${payload.slice(0, 20)}\n${payload.slice(20, 60)}\r\n${payload.slice(60)}`
-    expect(await decodeShareCode(broken)).toEqual(CODE)
+    expect(await decodeShareCode(broken)).toEqual(DECODED)
   })
 
   it('accepts raw JSON', async () => {
-    expect(await decodeShareCode(JSON.stringify(CODE))).toEqual(CODE)
-    expect(await decodeShareCode(`\n ${JSON.stringify(CODE)} \n`)).toEqual(CODE)
+    expect(await decodeShareCode(JSON.stringify(CODE))).toEqual(DECODED)
+    expect(await decodeShareCode(`\n ${JSON.stringify(CODE)} \n`)).toEqual(DECODED)
   })
 
   it('keeps only the known fields', async () => {
@@ -69,7 +79,28 @@ describe('decodeShareCode', () => {
     )
     expect(decoded).not.toHaveProperty('extra')
     expect(decoded.videos[0]).not.toHaveProperty('junk')
-    expect(decoded.videos[0]).toMatchObject(CODE.videos[0])
+    expect(decoded.videos[0]).toMatchObject(DECODED.videos[0])
+  })
+
+  it('converts the millisecond time field to seconds', async () => {
+    const decoded = await decodeShareCode(JSON.stringify(CODE))
+    expect(decoded.videos[0].time).toBe(429.417)
+    expect(decoded.videos[1].time).toBe(10)
+  })
+
+  it('decodes real SpotPlayer durations from milliseconds', async () => {
+    // Regression: the share code's `time` is ms, not seconds. Treating it as
+    // seconds rendered durations like `148:50:34` in the video list.
+    const cases: Array<[timeMs: number, seconds: number]> = [
+      [535834, 535.834],
+      [429417, 429.417],
+    ]
+    for (const [timeMs, seconds] of cases) {
+      const decoded = await decodeShareCode(
+        JSON.stringify({ ...CODE, videos: [{ ...CODE.videos[0], time: timeMs }] }),
+      )
+      expect(decoded.videos[0].time).toBe(seconds)
+    }
   })
 
   it('defaults a missing course name to an empty string', async () => {

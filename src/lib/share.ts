@@ -6,6 +6,9 @@
  *
  *   { l, m, course, name?, videos: [{ id, name, size, cdn, time }] }
  *
+ * In the share code `time` is a duration in milliseconds. Decoding converts it
+ * to seconds, so `Video.time` and everything downstream stay in seconds.
+ *
  * Decoding is pure and local — nothing is sent anywhere.
  */
 
@@ -78,12 +81,14 @@ function parseVideo(value: unknown, index: number): Video {
   if (!isRecord(value)) {
     throw new ShareCodeError('invalid-video', `video ${index} is not an object`)
   }
+  // The share code's duration is in milliseconds; `Video.time` is seconds.
+  const timeMs = requireVideoNumber(value, 'time', index)
   return {
     id: requireVideoString(value, 'id', index),
     name: requireVideoString(value, 'name', index),
     size: requireVideoNumber(value, 'size', index),
     cdn: requireVideoNumber(value, 'cdn', index),
-    time: requireVideoNumber(value, 'time', index),
+    time: timeMs / 1000,
   }
 }
 
