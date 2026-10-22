@@ -5,6 +5,7 @@
  */
 
 import { fa } from './i18n/fa'
+import { createShareCodeInput } from './features/share-code-input'
 import { el } from './ui/el'
 import { applyTheme, resolveInitialTheme, toggleTheme, type Theme } from './ui/theme'
 import { mountToastContainer } from './ui/toast'
@@ -174,6 +175,13 @@ export function startApp(root: HTMLElement): void {
   listMount.hidden = true
   actionMount.hidden = true
 
+  const shareMount = el('div', { id: 'share-code-mount' })
+  const shareInput = createShareCodeInput({
+    // Wired to the course summary and video list in the next task.
+    onLoaded: () => {},
+  })
+  shareMount.append(shareInput.element)
+
   const main = el(
     'main',
     {
@@ -182,7 +190,7 @@ export function startApp(root: HTMLElement): void {
         'mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8',
     },
     createIntro(),
-    el('div', { id: 'share-code-mount' }),
+    shareMount,
     courseMount,
     listMount,
     actionMount,
